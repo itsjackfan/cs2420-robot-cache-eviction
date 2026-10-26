@@ -17,6 +17,10 @@ OUT = Path(os.environ.get("RCE_OUT_ROOT", ROOT / "outputs"))
 
 
 def git_info():
+    if not (ROOT / ".git").exists():  # cluster copy synced by cluster/hooks/post-commit
+        branch, commit = (ROOT / ".gitinfo").read_text().split()
+        return branch, commit, False
+
     def git(*args):
         return subprocess.check_output(["git", "-C", str(ROOT), *args], text=True).strip()
     return git("rev-parse", "--abbrev-ref", "HEAD"), git("rev-parse", "HEAD"), bool(git("status", "--porcelain"))

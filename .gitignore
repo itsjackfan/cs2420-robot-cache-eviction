@@ -225,5 +225,6 @@ __marimo__/
 /data/
 *.pt
 prompt/
+.gitinfo
 .claude/worktrees/
 .claude/settings.local.json

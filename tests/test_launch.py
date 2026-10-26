@@ -62,3 +62,10 @@ def test_sbatch_command(monkeypatch, tmp_path):
     assert cmd[0] == "sbatch" and "--job-name=base" in cmd and f"--output={run_dir}/slurm-%j.out" in cmd
     assert cmd[-2:] == [str(ROOT / "cluster/run.sbatch"), str(run_dir / "config.yaml")]
     assert kw["cwd"] == ROOT and kw["check"]
+
+
+def test_git_info_from_synced_file_on_cluster(tmp_path):
+    launch = load()
+    launch.ROOT = tmp_path  # rsynced copy: no .git, only .gitinfo from cluster/hooks/post-commit
+    (tmp_path / ".gitinfo").write_text("noop abc123\n")
+    assert launch.git_info() == ("noop", "abc123", False)

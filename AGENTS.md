@@ -54,7 +54,9 @@ success rate. Measure systems cost (FLOPs, bytes, intensity, latency, memory) as
 - Checkpoints: `src.checkpoint.save` (atomic) to `run_dir/latest.pt`; every training loop must be resumable.
 
 ## Runs
-- Launch (human only), from the `<exp>` worktree: `uv run python cluster/launch.py <ablation> "policy=x train.lr=1e-3,1e-4"`.
+- Code lives in git locally only. Every commit rsyncs the worktree to `fasrc:~/cs2420-robot-cache-eviction/<exp>/`
+  (`cluster/hooks/post-commit`; writes `.gitinfo` = branch + commit, read by the launcher). Never edit code on the cluster.
+- Launch (human only), from the synced `<exp>` dir: `uv run python cluster/launch.py <ablation> "policy=x train.lr=1e-3,1e-4"`.
   Comma values expand into a sweep (one sbatch job each); each swept config gets the suffix `<ablation>_<key>=<val>`.
 - Output dir holds `config.yaml`, `freeze.txt`, `slurm-<jobid>.out`, `metrics.jsonl`, `latest.pt`, `videos/`, `wandb/`.
   Reusing an ablation name resumes that run.
@@ -77,7 +79,8 @@ Rollout splits: `train` = initial states of training demos; `test` = official LI
 ```text
 cluster/launch.py     launcher (log gate, sweeps, per-exp output dirs, sbatch)
 cluster/run.sbatch    one SLURM job: python -m src.run <run_dir>/config.yaml
-cluster/setup.sh      once per worktree: LIBERO clone + uv sync --group sim
+cluster/setup.sh      once per synced <exp> dir: LIBERO clone + uv sync --group sim
+cluster/hooks/        post-commit: rsync worktree to FASRC (enable: git config core.hooksPath cluster/hooks)
 configs/              Hydra: config.yaml + policy/ data/ eval/ train/ groups
 src/run.py            one run: data -> policy -> train -> final eval
 src/{data,policy,rollout,logger,checkpoint,train,config}.py

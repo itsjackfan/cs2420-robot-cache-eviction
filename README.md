@@ -5,20 +5,28 @@ Observation caching / cache eviction for robot policies on LIBERO, run on FASRC 
 
 ## Setup
 
+Code is edited and committed locally only. `cluster/hooks/post-commit` rsyncs each worktree (incl. `.env`) to
+`fasrc:~/cs2420-robot-cache-eviction/<exp>/` on every commit; no git on the cluster. Needs `Host fasrc` with
+ControlMaster in `~/.ssh/config` and an open `ssh fasrc` (for 2FA).
+
 ```bash
 uv sync && uv run pytest -q          # local: Python 3.12 .venv, mocked CPU-only tests
+git config core.hooksPath cluster/hooks   # local, once per clone (shared by worktrees)
+cp .env.example .env                 # fill in keys + cluster paths (git-ignored, synced)
 curl -LsSf https://astral.sh/uv/install.sh | sh   # on FASRC, once
-cp .env.example .env                 # fill in keys + cluster paths (git-ignored)
-bash cluster/setup.sh                # on FASRC, once per worktree: LIBERO clone + sim deps
+bash cluster/setup.sh                # on FASRC, once per synced <exp> dir: LIBERO clone + sim deps
 ```
+
+Pull results when needed (skip checkpoints):
+`rsync -az --exclude '*.pt' fasrc:<RCE_OUT_ROOT>/<exp>/<ablation>/ outputs/<exp>/<ablation>/`
 
 ## Run (humans only)
 
 1. Work in a worktree: `git worktree add ../<exp> -b <exp>`.
 2. Add a line containing `` `<ablation>` `` to [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md) saying what it tests. The launcher refuses unlogged names.
-3. Launch from the worktree on a login node:
+3. Commit (syncs), then launch on a login node:
    ```bash
-   set -a; source .env; set +a
+   cd ~/cs2420-robot-cache-eviction/<exp> && set -a; source .env; set +a
    uv run python cluster/launch.py <ablation> "<hydra overrides>"
    ```
    Comma values sweep (`train.lr=1e-3,1e-4`), one sbatch job each.
