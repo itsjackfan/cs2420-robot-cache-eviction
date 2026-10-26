@@ -7,3 +7,8 @@
 - YYYY-MM-DD HH:MM EST `<run-name>`: what this ablation tests. Changes: ... Expected: ... Result: ...
 
 Failed arms: branch, code changes, why it failed. -->
+
+- 2026-10-26 19:45 `e2e-smoke`: hello world once again
+    Changes: everything was built a la CS2243
+    Expected: works
+    Results: 
