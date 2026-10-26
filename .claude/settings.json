@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(sbatch:*)",
+      "Bash(srun:*)",
+      "Bash(salloc:*)",
+      "Bash(python cluster/launch.py:*)",
+      "Bash(uv run python cluster/launch.py:*)",
+      "Bash(python -m src.run:*)",
+      "Bash(uv run python -m src.run:*)",
+      "Read(./.env)",
+      "Edit(**/EXPERIMENT_LOG.md)",
+      "Write(**/EXPERIMENT_LOG.md)"
+    ]
+  }
+}

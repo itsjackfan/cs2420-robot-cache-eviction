@@ -218,3 +218,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project
+.DS_Store
+/outputs/
+/data/
+*.pt
+prompt/
+.claude/worktrees/
+.claude/settings.local.json

@@ -1,0 +1,16 @@
+defaults:
+  - policy: noop
+  - data: libero
+  - eval: libero
+  - train: default
+  - _self_
+
+name: ???      # set by launcher; must appear as `name` in EXPERIMENT_LOG.md
+run_dir: ???   # set by launcher: $RCE_OUT_ROOT/<branch>/<name>
+seed: 0
+device: cuda
+git:
+  branch: ???
+  commit: ???
+  dirty: ???
+wandb: {project: cs2420-robot-cache-eviction, entity: jackfandev-harvard-university, mode: online}

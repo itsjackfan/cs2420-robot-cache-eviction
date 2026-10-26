@@ -1,0 +1,12 @@
+repo_id: yifengzhu-hf/LIBERO-datasets
+root: null                              # local dir with <suite>/*.hdf5; null -> HF download
+download_dir: ${oc.env:RCE_DATA_DIR,data}/LIBERO  # downloaded once, shared by all runs
+obs_horizon: 2
+action_horizon: 16
+val_ratio: 0.1                          # last demos of each task -> test/loss
+sources:                                # gates
+  libero_spatial: true
+  libero_object: false
+  libero_goal: false
+  libero_10: false
+  libero_90: false

@@ -1,0 +1,20 @@
+[project]
+name = "rce"
+version = "0.1.0"
+description = "Observation caching / cache eviction for robot policies on LIBERO, run on FASRC (SLURM)"
+requires-python = ">=3.12,<3.13"
+dependencies = ["torch", "numpy", "einops", "h5py", "hydra-core", "wandb", "huggingface_hub", "imageio[ffmpeg]",
+                "pyyaml"]
+
+[dependency-groups]
+dev = ["pytest"]
+# cluster only; LIBERO itself is cloned + put on PYTHONPATH by cluster/setup.sh
+sim = ["robosuite==1.4.1", "mujoco==3.1.6", "bddl==1.0.1", "gym==0.26.2", "easydict", "cloudpickle", "opencv-python-headless",
+       "matplotlib", "numba", "scipy", "future"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

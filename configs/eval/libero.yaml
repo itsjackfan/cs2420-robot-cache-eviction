@@ -1,0 +1,12 @@
+suites:              # gates
+  libero_spatial: true
+  libero_object: false
+  libero_goal: false
+  libero_10: false
+  libero_90: false
+n_train: 2           # episodes/task from training-demo init states -> train/*
+n_test: 10           # episodes/task from official init states (max 50; 50 for reported numbers) -> test/*
+n_action_steps: 8    # executed per predicted chunk
+settle_steps: 10     # no-op steps before the policy acts
+max_steps: {libero_spatial: 220, libero_object: 280, libero_goal: 300, libero_10: 520, libero_90: 400}
+video: true          # first episode per split/suite
