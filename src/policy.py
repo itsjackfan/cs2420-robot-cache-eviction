@@ -1,8 +1,10 @@
 """Policy interface. Dims: B batch, O obs horizon, P action horizon, V views (agentview, wrist), H height, W width,
 C rgb, S state (8), A action (7).
 obs = {state [B, O, S] f32, image [B, O, V, H, W, C] u8 raw, lang list[str] (B)}; batch = obs + {action [B, P, A] f32}."""
+from collections import defaultdict
 import itertools
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
@@ -10,6 +12,19 @@ from torch import nn
 
 class Policy(nn.Module):
     """Subclass me. Built from configs/policy/<x>.yaml via _target_; weights live in run_dir/latest.pt."""
+
+    probing = False  # set by the rollout on every eval.probe_every-th call; record() probe metrics only then
+
+    def record(self, metrics):
+        self.__dict__.setdefault("_probes", []).append(metrics)
+
+    def stats(self):
+        """-> {name: mean over recorded calls} since the last call; logged per rollout split as {split}/<name>."""
+        by_key = defaultdict(list)
+        for m in self.__dict__.pop("_probes", []):
+            for k, v in m.items():
+                by_key[k].append(v)
+        return {k: float(np.mean(v)) for k, v in by_key.items()}
 
     def compute_loss(self, batch):
         """-> {"loss": scalar, **policy metrics}; every key is logged as {split}/{key}."""

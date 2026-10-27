@@ -10,3 +10,6 @@ n_action_steps: 8    # executed per predicted chunk
 settle_steps: 10     # no-op steps before the policy acts
 max_steps: {libero_spatial: 220, libero_object: 280, libero_goal: 300, libero_10: 520, libero_90: 400}
 video: true          # first episode per split/suite
+camera_px: 128       # sim render size (HDF5 demos are 128; SmolVLA was trained on 256)
+probe_every: 10      # Policy.probing on every k-th call per episode (k=1: all; probed calls are not timed)
+patch_px: 16         # patch size for patch_similarity (frame-to-frame reuse)

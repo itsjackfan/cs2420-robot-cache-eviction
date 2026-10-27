@@ -12,12 +12,17 @@ NOT GIVEN AS INPUT TO POLICY:
 - X sim state: environment description at each point in time
 - F video frames: total number of frames (generally N, but can be more if the environment is running at a higher framerate than the policy)"""
 import json
+import os
+import sys
 
 import h5py
 import numpy as np
 import pytest
 
 from src.config import compose
+
+if os.environ.get("LIBERO_ROOT"):  # LIBERO is a clone, not a package (cluster/setup.sh)
+    sys.path.append(os.environ["LIBERO_ROOT"])
 
 H = W = 8
 N = 10
@@ -96,7 +101,7 @@ def fake_tasks(monkeypatch):
     envs = {"task_a": FakeEnv(success_step=4), "task_b": FakeEnv()}
     tasks = [dict(name=n, instruction=INSTRUCTIONS[n], init_states=[np.full(5, -1.0)] * 50,  # 50 x [X]
                   make_env=lambda n=n: envs[n]) for n in envs]
-    monkeypatch.setattr("src.rollout.libero_tasks", lambda suite: tasks)
+    monkeypatch.setattr("src.rollout.libero_tasks", lambda suite, camera_px: tasks)
     return envs
 
 

@@ -12,6 +12,8 @@ import numpy as np
 import torch
 import yaml
 
+from src.probe import patch_similarity
+
 NOOP_A = np.array([0, 0, 0, 0, 0, 0, -1], np.float32)
 
 
@@ -27,18 +29,21 @@ def configure_libero():
     (folder / "config.yaml").write_text(yaml.safe_dump(config))
 
 
-def libero_tasks(suite):
+def libero_tasks(suite, camera_px):
     configure_libero()
-    from libero.libero import benchmark
+    from libero.libero import benchmark, get_libero_path
     from libero.libero.envs import OffScreenRenderEnv
     bench = benchmark.get_benchmark_dict()[suite](task_order_index=0)
     tasks = []
     for i in range(bench.get_num_tasks()):
         task = bench.get_task(i)
-        # 128px cameras match the HDF5 demo images
-        tasks.append(dict(name=task.name, instruction=task.language, init_states=bench.get_task_init_states(i),
+        # bench.get_task_init_states uses torch.load's weights_only=True default (torch>=2.6), which rejects these numpy pickles
+        init_states = torch.load(Path(get_libero_path("init_states")) / task.problem_folder / task.init_states_file,
+                                 weights_only=False)
+        # 128 px matches the HDF5 demos; SmolVLA's LIBERO data was rendered at 256 px
+        tasks.append(dict(name=task.name, instruction=task.language, init_states=init_states,
                           make_env=partial(OffScreenRenderEnv, bddl_file_name=bench.get_task_bddl_file_path(i),
-                                           camera_heights=128, camera_widths=128)))
+                                           camera_heights=camera_px, camera_widths=camera_px)))
     return tasks
 
 
@@ -70,18 +75,25 @@ def episode(env, policy, init_state_X, instruction, cfg, max_steps, record):
 
     # setup bookkeeping, 
     history = deque([obs_from_sim(raw)] * cfg.data.obs_horizon, maxlen=cfg.data.obs_horizon) # 1. autodrop after O; 2. double ended queue for pop/push at both ends
-    rewards, frames_HWC, infer_s, done = [], [], 0.0, False
-    
+    rewards, frames_HWC, infer_s, timed_steps, done = [], [], 0.0, 0, False
+    calls, prev_image_VHWC = 0, None
+
     while not done and len(rewards) < max_steps:
         obs = {k: torch.from_numpy(np.stack([h[k] for h in history]))[None].to(policy.device)  # [1, O, ...]
                for k in ("state", "image")} # history / obs updated after each block of actions
                # NOTE: any past obs cache management / context management could be done here re: 2420 project
+        policy.probing = calls % cfg.eval.probe_every == 0  # probed calls are not timed (probe overhead)
+        if policy.probing and prev_image_VHWC is not None:
+            policy.record(patch_similarity(prev_image_VHWC, history[-1]["image"], cfg.eval.patch_px))
+        prev_image_VHWC, calls = history[-1]["image"], calls + 1
         start = time.perf_counter()
         with torch.no_grad():
             # predict block of actions with one FP
             action_PA = policy.predict_action({**obs, "lang": [instruction]})[0, :cfg.eval.n_action_steps].cpu().numpy()
-        infer_s += time.perf_counter() - start
-        
+        if not policy.probing:
+            infer_s += time.perf_counter() - start
+            timed_steps += len(action_PA)
+
         # step through each block
         for action_A in action_PA:
             raw, reward, done, _ = env.step(action_A)
@@ -92,17 +104,19 @@ def episode(env, policy, init_state_X, instruction, cfg, max_steps, record):
             if done or len(rewards) == max_steps:
                 break
 
-    return dict(score=max(rewards), reward=sum(rewards), steps=len(rewards), infer_s=infer_s,
+    policy.probing = False
+    return dict(score=max(rewards), reward=sum(rewards), timed_steps=timed_steps, infer_s=infer_s, stats=policy.stats(),
                 video_FHWC=np.stack(frames_HWC) if record else None)
 
 
 def evaluate(policy, cfg, root):
-    """-> {split}/{suite}/{mean_score,video}, {split}/{mean_score,mean_reward,control_hz}. Gated by cfg.eval.suites."""
+    """-> {split}/{suite}/{mean_score,video}, {split}/{mean_score,mean_reward,control_hz}, {split}/<probe stat> (mean over
+    episodes of Policy.stats()). Gated by cfg.eval.suites."""
     was_training = policy.training
     policy.eval()
     results = {}  # (split, suite) -> [episode]
     for suite in (s for s, on in cfg.eval.suites.items() if on):
-        for task in libero_tasks(suite):
+        for task in libero_tasks(suite, cfg.eval.camera_px):
             env = task["make_env"]()
             init_states = {"train": demo_init_states(Path(root) / suite / f"{task['name']}_demo.hdf5", cfg.eval.n_train),
                            "test": task["init_states"][:cfg.eval.n_test]}
@@ -126,5 +140,7 @@ def evaluate(policy, cfg, root):
         if split_eps:
             metrics[f"{split}/mean_score"] = float(np.mean([e["score"] for e in split_eps]))
             metrics[f"{split}/mean_reward"] = float(np.mean([e["reward"] for e in split_eps]))
-            metrics[f"{split}/control_hz"] = sum(e["steps"] for e in split_eps) / sum(e["infer_s"] for e in split_eps)
+            metrics[f"{split}/control_hz"] = sum(e["timed_steps"] for e in split_eps) / sum(e["infer_s"] for e in split_eps)
+            for k in {k for e in split_eps for k in e["stats"]}:
+                metrics[f"{split}/{k}"] = float(np.mean([e["stats"][k] for e in split_eps if k in e["stats"]]))
     return metrics

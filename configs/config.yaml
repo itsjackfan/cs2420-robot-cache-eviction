@@ -1,8 +1,8 @@
 defaults:
-  - policy: noop
   - data: libero
   - eval: libero
   - train: default
+  - policy: noop   # last: policy presets (@package _global_) may override data/eval/train
   - _self_
 
 name: ???      # set by launcher; must appear as `name` in EXPERIMENT_LOG.md

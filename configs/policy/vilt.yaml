@@ -1,0 +1,9 @@
+# @package _global_
+# LIBERO BC-ViLT, randomly initialized unless trained (train.epochs > 0). Window = latent cache length.
+policy:
+  _target_: src.vilt.ViLTPolicy
+  max_seq_len: ${data.obs_horizon}
+  device: ${device}
+data: {obs_horizon: 10, action_horizon: 1}
+eval: {n_action_steps: 1}
+train: {epochs: 0}

@@ -3,17 +3,36 @@ name = "rce"
 version = "0.1.0"
 description = "Observation caching / cache eviction for robot policies on LIBERO, run on FASRC (SLURM)"
 requires-python = ">=3.12,<3.13"
-dependencies = ["torch", "numpy", "einops", "h5py", "hydra-core", "wandb", "huggingface_hub", "imageio[ffmpeg]",
-                "pyyaml"]
+dependencies = [
+    "torch",
+    "numpy",
+    "einops",
+    "h5py",
+    "hydra-core",
+    "wandb",
+    "huggingface_hub",
+    "imageio[ffmpeg]",
+    "pyyaml",
+    "lerobot[smolvla]>=0.6.1",
+    "torchvision>=0.26.0",
+    "robomimic==0.2.0",
+    "easydict",
+]
 
 [dependency-groups]
 dev = ["pytest"]
-# cluster only; LIBERO itself is cloned + put on PYTHONPATH by cluster/setup.sh
-sim = ["robosuite==1.4.1", "mujoco==3.1.6", "bddl==1.0.1", "gym==0.26.2", "easydict", "cloudpickle", "opencv-python-headless",
+# LIBERO itself is cloned + put on PYTHONPATH by cluster/setup.sh
+sim = ["robosuite==1.4.1", "mujoco==3.1.6", "bddl==1.0.1", "gym==0.26.2", "cloudpickle", "opencv-python-headless",
        "matplotlib", "numba", "scipy", "future"]
 
 [tool.uv]
 package = false
+
+# LIBERO's BC policies only need robomimic's tensor utils/crop; its pinned deps (egl_probe, ...) don't build
+[[tool.uv.dependency-metadata]]
+name = "robomimic"
+version = "0.2.0"
+requires-dist = []
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

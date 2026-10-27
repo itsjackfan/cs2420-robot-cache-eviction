@@ -1,0 +1,9 @@
+# @package _global_
+# Pretrained SmolVLA (0.5B) finetuned on LIBERO; inference + probes only. Trained on 256 px renders.
+policy:
+  _target_: src.smolvla.SmolVLA
+  repo_id: HuggingFaceVLA/smolvla_libero
+  device: ${device}
+data: {obs_horizon: 1, action_horizon: 50}
+eval: {n_action_steps: 10, camera_px: 256}
+train: {epochs: 0}

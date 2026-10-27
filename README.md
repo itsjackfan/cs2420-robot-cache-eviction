@@ -10,12 +10,16 @@ Code is edited and committed locally only. `cluster/hooks/post-commit` rsyncs ea
 ControlMaster in `~/.ssh/config` and an open `ssh fasrc` (for 2FA).
 
 ```bash
-uv sync && uv run pytest -q          # local: Python 3.12 .venv, mocked CPU-only tests
+uv sync --group sim                  # local: Python 3.12 .venv incl. LIBERO sim deps
+git clone https://github.com/Lifelong-Robot-Learning/LIBERO.git ../LIBERO   # local LIBERO (pin: cluster/setup.sh)
+LIBERO_ROOT=$PWD/../LIBERO uv run pytest -q   # mocked CPU-only tests (test_vilt needs LIBERO_ROOT)
 git config core.hooksPath cluster/hooks   # local, once per clone (shared by worktrees)
-cp .env.example .env                 # fill in keys + cluster paths (git-ignored, synced)
+cp .env.example .env                 # cluster keys + paths (git-ignored, synced); copy into each new worktree
 curl -LsSf https://astral.sh/uv/install.sh | sh   # on FASRC, once
 bash cluster/setup.sh                # on FASRC, once per synced <exp> dir: LIBERO clone + sim deps
 ```
+
+Local runs on macOS need `MUJOCO_GL=cgl LIBERO_ROOT=../LIBERO PYTHONPATH=.:../LIBERO device=mps|cpu`.
 
 Pull results when needed (skip checkpoints):
 `rsync -az --exclude '*.pt' fasrc:<RCE_OUT_ROOT>/<exp>/<ablation>/ outputs/<exp>/<ablation>/`

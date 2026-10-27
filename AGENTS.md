@@ -48,9 +48,17 @@ success rate. Measure systems cost (FLOPs, bytes, intensity, latency, memory) as
   `image [B,O,V,H,W,C] u8` raw (the policy normalizes), `lang list[str]`, `action [B,P,A] f32`.
 - Policies subclass `src.policy.Policy` (nn.Module): `compute_loss(batch) -> {"loss", **metrics}`,
   `predict_action(obs) -> [B,P,A]`, `reset()` (called at every episode start; clear any observation cache there).
+- Probes: the rollout sets `policy.probing` on every `eval.probe_every`-th call; while probing, a policy calls
+  `self.record({name: float})`, and the episode logs `stats()` (mean over probed calls). Shared probe math lives in
+  `src/probe.py` (`attn_stats`, `patch_similarity`, `attn_probs`). Probed calls are not timed.
+- Policies: `noop`, `vilt` (LIBERO BC-ViLT, `src/vilt.py`; its `latent_queue` is the observation cache), `smolvla`
+  (pretrained lerobot SmolVLA, `src/smolvla.py`; inference only).
 - Hotswap models and objectives through Hydra groups `configs/{policy,data,eval,train}/<x>.yaml` with `_target_`; a new
   model or objective is a new yaml + class, never a flag. Data/eval gates: `data.sources.<suite>`, `eval.suites.<suite>`.
-- Observation history / cache management during rollouts: `src/rollout.py:episode` (marked `NOTE`).
+  Policy yamls are presets (`# @package _global_`, loaded last) that also set the data/eval/train values they need;
+  CLI overrides still win.
+- Observation history / cache management during rollouts: `src/rollout.py:episode` (marked `NOTE`); policies with their
+  own cache (vilt, smolvla) use only the newest frame of `obs`.
 - Checkpoints: `src.checkpoint.save` (atomic) to `run_dir/latest.pt`; every training loop must be resumable.
 
 ## Runs
@@ -72,6 +80,13 @@ success rate. Measure systems cost (FLOPs, bytes, intensity, latency, memory) as
 | `{split}/mean_reward` | mean summed episode reward |
 | `{split}/control_hz` | executed actions / policy inference seconds |
 | `{split}/<suite>/video` | first episode, mp4 (also saved in `run_dir/videos/`) |
+| `{split}/attn/<module>/l<i>/<q>-><k>` | mean attention mass from query group `q` to key group `k` in layer `i` |
+| `{split}/attn/<module>/l<i>/<q>/{entropy,top10}` | entropy / log(#unmasked keys); mass on the top 10% of keys |
+| `{split}/patch_{cos,reuse}` | raw-pixel patch cosine similarity between consecutive calls; fraction > 0.95 |
+
+Probe groups: vilt `spatial` (q: readout, text; k: readout, agentview, wrist, text) and `temporal` (q: readout;
+k: `lag<k>` = k-th newest cached frame); smolvla `vlm` (q: lang, state; k: agentview, wrist, lang, state) and `expert`
+(q: actions; k: prefix groups + actions). `lag<k>` means mix cache sizes until the queue is full (first `max_seq_len` calls).
 
 Rollout splits: `train` = initial states of training demos; `test` = official LIBERO init states (50 for reported numbers).
 
@@ -84,7 +99,10 @@ cluster/hooks/        post-commit: rsync worktree to FASRC (enable: git config c
 configs/              Hydra: config.yaml + policy/ data/ eval/ train/ groups
 src/run.py            one run: data -> policy -> train -> final eval
 src/{data,policy,rollout,logger,checkpoint,train,config}.py
+src/probe.py          attention / frame-reuse probe math
+src/{vilt,smolvla}.py adapters for LIBERO BC-ViLT and lerobot SmolVLA
 tests/                shape + smoke tests, mocked, CPU-only; tests/test_train.py = training-loop contract
+                      (test_vilt.py needs LIBERO_ROOT set, otherwise skipped)
 scripts/tmp_<exp>/    throwaway scripts (delete after use)
 results/              small reported tables/plots only
 EXPERIMENT_LOG.md     human-written only
@@ -93,7 +111,15 @@ EXPERIMENT_LOG.md     human-written only
 ## Gotchas
 - LIBERO images are upside-down in both the HDF5 and the sim; keep them raw (consistent) and flip only for display.
 - The raw HDF5 demos are 128 px and still contain no-op actions; sim cameras are set to 128 px to match.
-- Python 3.12 forces `mujoco` 3.x (pinned 3.1.6) under `robosuite==1.4.1`; verify the sim on the first smoke run.
+- Python 3.12 forces `mujoco` 3.x (pinned 3.1.6) under `robosuite==1.4.1`; with numpy 2 (from lerobot) it runs
+  (verified locally on macOS with `MUJOCO_GL=cgl`).
+- torch>=2.6 `torch.load` defaults to `weights_only=True`, which rejects LIBERO's init-state pickles;
+  `rollout.libero_tasks` loads them itself with `weights_only=False`.
+- SmolVLA's LIBERO data is rotated 180 deg vs raw LIBERO and rendered at 256 px: `src/smolvla.py:to_lerobot` flips,
+  `policy=smolvla` sets `eval.camera_px=256`.
+- `robomimic` is installed without its pinned deps (`[tool.uv.dependency-metadata]`); LIBERO's BC policies only need
+  its tensor utils / crop randomizer.
+- `draccus` (lerobot dep) installs a top-level `tests` package; `tests/__init__.py` keeps ours importable.
 - SLURM runs the worktree's code as it is when the job *starts*, not when submitted; don't edit a worktree with queued jobs.
 - The launcher submits each job to whichever of `cluster/launch.py:QUEUES` (`gpu_requeue`/`ydu_lab`,
   `kempner_requeue`/`kempner_ydu_lab`) has the earliest `sbatch --test-only` start; one job = one account, and

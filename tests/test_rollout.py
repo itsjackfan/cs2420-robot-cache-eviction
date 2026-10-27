@@ -43,3 +43,22 @@ def test_evaluate_metrics(cfg, libero_root, fake_tasks):
     assert len(env_b.init_states_X) == cfg.eval.n_train + cfg.eval.n_test and env_b.closed
     assert env_b.init_states_X[0][0] == 0  # train split starts from demo_0 states[0]
     assert env_b.steps == 3 * (cfg.eval.settle_steps + cfg.eval.max_steps.libero_spatial)
+
+
+def test_probe_cadence_and_stats(cfg, libero_root, fake_tasks):
+    calls = []
+
+    class Probed(NoOpPolicy):
+        def predict_action(self, obs):
+            calls.append(self.probing)
+            if self.probing:
+                self.record({"attn/x": 1.0})
+            return super().predict_action(obs)
+
+    cfg.eval.probe_every, cfg.eval.patch_px = 2, 4
+    m = evaluate(Probed(action_horizon=4), cfg, libero_root)
+    assert calls[:3] == [True, False, True]  # probed on calls 0, 2, ... of each episode
+    for split in ("train", "test"):
+        assert m[f"{split}/attn/x"] == 1.0
+        assert f"{split}/patch_cos" in m and f"{split}/patch_reuse" in m
+        assert m[f"{split}/control_hz"] > 0  # timed on unprobed calls only
