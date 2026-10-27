@@ -1,6 +1,8 @@
 #!/bin/bash
 # One run. Submitted only by cluster/launch.py (cwd = worktree root): sbatch cluster/run.sbatch <run_dir>/config.yaml
-#SBATCH --partition=gpu
+#SBATCH --partition=gpu_requeue,kempner_requeue
+#SBATCH --requeue
+#SBATCH --open-mode=append
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
