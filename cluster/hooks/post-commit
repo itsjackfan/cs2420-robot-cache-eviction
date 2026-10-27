@@ -4,6 +4,7 @@
 b=$(git rev-parse --abbrev-ref HEAD)
 dst=cs2420-robot-cache-eviction/$b
 printf '%s %s\n' "$b" "$(git rev-parse HEAD)" > .gitinfo
-rsync -az --delete --exclude .git --exclude .venv --exclude outputs --exclude data --exclude __pycache__ \
+# leading / anchors to repo root: a bare `data` would also drop configs/data/
+rsync -az --delete --exclude /.git --exclude /.venv --exclude /outputs --exclude /data --exclude __pycache__ \
   --exclude .pytest_cache -e "ssh -o BatchMode=yes" --rsync-path="mkdir -p $dst && rsync" ./ "fasrc:$dst/" \
   || echo "post-commit: sync failed; run 'ssh fasrc' once, then 'cluster/hooks/post-commit'"
