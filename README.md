@@ -32,8 +32,8 @@ Pull results when needed (skip checkpoints):
    Comma values sweep (`train.lr=1e-3,1e-4`), one sbatch job each.
 
 Examples:
-- Smoke (short queue; `SBATCH_*` env vars override `cluster/run.sbatch` directives):
-  `SBATCH_PARTITION=gpu_test SBATCH_TIMELIMIT=00:30:00 uv run python cluster/launch.py e2e-smoke "train.epochs=1 train.max_steps=1 eval.n_train=1 eval.n_test=1"`
+- Smoke (`SBATCH_TIMELIMIT` overrides `cluster/run.sbatch`; partition/account are picked by the launcher):
+  `SBATCH_TIMELIMIT=00:30:00 uv run python cluster/launch.py e2e-smoke "train.epochs=1 train.max_steps=1 eval.n_train=1 eval.n_test=1"`
 - No-op baseline: `uv run python cluster/launch.py noop-baseline "eval.n_test=50"`
 
 ## Where things go

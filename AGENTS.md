@@ -95,6 +95,9 @@ EXPERIMENT_LOG.md     human-written only
 - The raw HDF5 demos are 128 px and still contain no-op actions; sim cameras are set to 128 px to match.
 - Python 3.12 forces `mujoco` 3.x (pinned 3.1.6) under `robosuite==1.4.1`; verify the sim on the first smoke run.
 - SLURM runs the worktree's code as it is when the job *starts*, not when submitted; don't edit a worktree with queued jobs.
-- Default partitions are `gpu_requeue,kempner_requeue` (whichever starts first); jobs can be preempted and requeued,
-  resuming from `latest.pt` (work since the last epoch checkpoint is lost). Logs append across requeues.
+- The launcher submits each job to whichever of `cluster/launch.py:QUEUES` (`gpu_requeue`/`ydu_lab`,
+  `kempner_requeue`/`kempner_ydu_lab`) has the earliest `sbatch --test-only` start; one job = one account, and
+  `gpu_requeue` denies kempner accounts. `--constraint=a100|h100|h200` excludes MIG slices and A40s.
+- Requeue partitions preempt: jobs are requeued and resume from `latest.pt` (work since the last epoch checkpoint is
+  lost). Logs append across requeues.
 - Jobs use `uv run --no-sync`; run `uv sync --group sim` yourself after changing dependencies.

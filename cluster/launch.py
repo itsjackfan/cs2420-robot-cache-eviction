@@ -3,6 +3,7 @@ Comma-separated override values (`train.lr=1e-3,1e-4`) expand into a sweep; one 
 from pathlib import Path
 import itertools
 import os
+import re
 import subprocess
 import sys
 
@@ -14,6 +15,7 @@ from src.config import compose  # noqa: E402
 
 LOG = ROOT / "EXPERIMENT_LOG.md"
 OUT = Path(os.environ.get("RCE_OUT_ROOT", ROOT / "outputs"))
+QUEUES = [("gpu_requeue", "ydu_lab"), ("kempner_requeue", "kempner_ydu_lab")]  # gpu_requeue denies kempner_* accounts
 
 
 def git_info():
@@ -26,9 +28,19 @@ def git_info():
     return git("rev-parse", "--abbrev-ref", "HEAD"), git("rev-parse", "HEAD"), bool(git("status", "--porcelain"))
 
 
-def sbatch(run_dir, name):
-    subprocess.run(["sbatch", f"--job-name={name}", f"--output={run_dir}/slurm-%j.out",
-                    str(ROOT / "cluster/run.sbatch"), str(run_dir / "config.yaml")], cwd=ROOT, check=True)
+def best_queue():
+    """(partition, account) with the earliest `sbatch --test-only` start estimate (ISO timestamps sort as strings)."""
+    def start(partition, account):
+        out = subprocess.run(["sbatch", "--test-only", f"--partition={partition}", f"--account={account}",
+                              str(ROOT / "cluster/run.sbatch")], cwd=ROOT, capture_output=True, text=True).stderr
+        return re.search(r"to start at (\S+)", out).group(1)
+    return min(QUEUES, key=lambda q: start(*q))
+
+
+def sbatch(run_dir, name, partition, account):
+    subprocess.run(["sbatch", f"--job-name={name}", f"--output={run_dir}/slurm-%j.out", f"--partition={partition}",
+                    f"--account={account}", str(ROOT / "cluster/run.sbatch"), str(run_dir / "config.yaml")],
+                   cwd=ROOT, check=True)
 
 
 def main(name, overrides=""):
@@ -49,7 +61,7 @@ def main(name, overrides=""):
         run_dir.mkdir(parents=True, exist_ok=True)
         OmegaConf.save(OmegaConf.create(OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True)),
                        run_dir / "config.yaml")
-        sbatch(run_dir, run_name)
+        sbatch(run_dir, run_name, *best_queue())
 
 
 if __name__ == "__main__":

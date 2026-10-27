@@ -24,6 +24,7 @@ def launch(monkeypatch, tmp_path):
     launch.OUT = tmp_path / "runs"
     monkeypatch.setattr(launch, "git_info", lambda: ("noop", "abc123", False))
     monkeypatch.setattr(launch, "sbatch", MagicMock())
+    monkeypatch.setattr(launch, "best_queue", lambda: ("kempner_requeue", "kempner_ydu_lab"))
     return launch
 
 
@@ -57,11 +58,31 @@ def test_sbatch_command(monkeypatch, tmp_path):
     launch, calls = load(), []
     monkeypatch.setattr(launch.subprocess, "run", lambda cmd, **kw: calls.append((cmd, kw)))
     run_dir = tmp_path / "noop/base"
-    launch.sbatch(run_dir, "base")
+    launch.sbatch(run_dir, "base", "kempner_requeue", "kempner_ydu_lab")
     ((cmd, kw),) = calls
     assert cmd[0] == "sbatch" and "--job-name=base" in cmd and f"--output={run_dir}/slurm-%j.out" in cmd
+    assert "--partition=kempner_requeue" in cmd and "--account=kempner_ydu_lab" in cmd
     assert cmd[-2:] == [str(ROOT / "cluster/run.sbatch"), str(run_dir / "config.yaml")]
     assert kw["cwd"] == ROOT and kw["check"]
+
+
+def test_best_queue_picks_earliest_start(monkeypatch):
+    launch, calls = load(), []
+    starts = {"gpu_requeue": "2026-10-26T21:00:00", "kempner_requeue": "2026-10-26T20:05:00"}
+
+    def run(cmd, **kw):
+        calls.append(cmd)
+        p = next(a.split("=")[1] for a in cmd if a.startswith("--partition="))
+        return MagicMock(stderr=f"sbatch: Job 1 to start at {starts[p]} using 8 processors on nodes n1 in partition {p}")
+
+    monkeypatch.setattr(launch.subprocess, "run", run)
+    assert launch.best_queue() == ("kempner_requeue", "kempner_ydu_lab")
+    assert all("--test-only" in c for c in calls) and len(calls) == 2
+
+
+def test_submits_to_best_queue(launch):
+    launch.main("base")
+    assert launch.sbatch.call_args.args[2:] == ("kempner_requeue", "kempner_ydu_lab")
 
 
 def test_git_info_from_synced_file_on_cluster(tmp_path):
