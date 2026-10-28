@@ -12,5 +12,6 @@ set -euo pipefail
 cd "$SLURM_SUBMIT_DIR"
 set -a; source .env; set +a
 export MUJOCO_GL=egl PYOPENGL_PLATFORM=egl PYTHONPATH="$PWD:$LIBERO_ROOT"
+echo "job $SLURM_JOB_ID on $(hostname) ($SLURM_JOB_PARTITION)"; nvidia-smi --query-gpu=name,memory.used,compute_mode --format=csv
 uv pip freeze > "$(dirname "$1")/freeze.txt"
 uv run --no-sync python -m src.run "$1"  # --no-sync: concurrent jobs must not rewrite the shared .venv
