@@ -14,8 +14,8 @@ import numpy as np
 root = Path(sys.argv[1] if len(sys.argv) > 1 else "outputs/attn-probe")
 out = root / "aggregate"
 out.mkdir(exist_ok=True)
-BASE, LOO = "smolvla-attn-trace", "smolvla-leave-one-out-attn-entropy"
-GROUPS, CHUNKS = ["agentview", "wrist", "lang", "state"], ["agentview", "wrist", "lang", "state", "sinks"]
+BASE, LOO = "smolvla-attn-trace", "smolvla-loo-attnmask"
+GROUPS, CHUNKS = ["agentview", "wrist", "lang", "state"], ["agentview", "wrist", "lang", "state", "sinks", "random4"]
 QUADS = [f"q{r}{c}" for r in (0, 1) for c in (0, 1)]
 INK, MUTED, GRID, SURFACE = "#0b0b0b", "#898781", "#e1e0d9", "#fcfcfb"
 SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4"]  # validated categorical order
@@ -82,16 +82,18 @@ if loo:
     md.append(f"\n## 3. Leave-one-out counterfactuals ({len(loo)} tasks, every 2nd call probed)\n")
     md.append("`action_dev` = RMS change of the executed normalized actions; `spiky` = share of calls with action_dev > "
               "2x that chunk's median (key-context moments); `attn_shift` = TV distance of expert attention.\n")
-    md.append("| chunk | action_dev mean | p90 | spiky | entropy_delta | attn_shift |")
-    md.append("| --- | --- | --- | --- | --- | --- |")
+    md.append("Controls: `none` (nothing evicted, = 0) and `random4` (4 random image tokens); `x random4` = action_dev / random4's.\n")
+    md.append("| chunk | action_dev mean | x random4 | p90 | spiky | entropy_delta | attn_shift |")
+    md.append("| --- | --- | --- | --- | --- | --- | --- |")
     rows = []
     for c in loo_chunks:
         dev = calls(loo, f"loo/{c}/action_dev").ravel()
         dev = dev[~np.isnan(dev)]
-        rows.append((c, dev.mean(), np.percentile(dev, 90), np.mean(dev > 2 * np.median(dev)),
+        rows.append((c, dev.mean(), np.percentile(dev, 90), np.mean(dev > 2 * np.median(dev)) if dev.any() else 0.0,
                      nanmean(calls(loo, f"loo/{c}/entropy_delta")), nanmean(calls(loo, f"loo/{c}/attn_shift"))))
+    ref = dict((r[0], r[1]) for r in rows).get("random4", np.nan)
     for c, *v in sorted(rows, key=lambda r: -r[1]):
-        md.append(f"| {c} | {v[0]:.3f} | {v[1]:.3f} | {v[2]:.0%} | {v[3]:+.3f} | {v[4]:.3f} |")
+        md.append(f"| {c} | {v[0]:.3f} | {v[0] / ref:.1f} | {v[1]:.3f} | {v[2]:.0%} | {v[3]:+.3f} | {v[4]:.3f} |")
 
     fig, axes = plt.subplots(1, 3, figsize=(15, 3.8), sharey=True)
     for ax, (title, names) in zip(axes, [("Whole chunks", CHUNKS), ("Agentview quadrants", [f"agentview_{q}" for q in QUADS]),
