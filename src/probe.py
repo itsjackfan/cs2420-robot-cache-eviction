@@ -1,10 +1,21 @@
 """Model-agnostic probes for attention attribution and frame reuse (VLA-Cache, H2O-style signals).
 Dims: B batch, H heads, Q queries, K keys, D head dim, V views, H height, W width, C rgb, N patches, F patch features."""
+from collections import defaultdict
 import math
 
 import numpy as np
 import torch
 from einops import rearrange
+
+
+def mean_stats(dicts):
+    """[{name: float | array}] -> {name: mean over the dicts that have it} (arrays: elementwise)."""
+    by_key = defaultdict(list)
+    for d in dicts:
+        for k, v in d.items():
+            by_key[k].append(v)
+    means = {k: np.mean(v, axis=0) for k, v in by_key.items()}
+    return {k: float(v) if np.ndim(v) == 0 else v for k, v in means.items()}
 
 
 def attn_stats(probs_BHQK, q_groups, k_groups):

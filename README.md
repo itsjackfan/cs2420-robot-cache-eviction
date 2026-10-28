@@ -11,22 +11,23 @@ ControlMaster in `~/.ssh/config` and an open `ssh fasrc` (for 2FA).
 
 ```bash
 uv sync --group sim                  # local: Python 3.12 .venv incl. LIBERO sim deps
-git clone https://github.com/Lifelong-Robot-Learning/LIBERO.git ../LIBERO   # local LIBERO (pin: cluster/setup.sh)
-LIBERO_ROOT=$PWD/../LIBERO uv run pytest -q   # mocked CPU-only tests (test_vilt needs LIBERO_ROOT)
+git clone https://github.com/Lifelong-Robot-Learning/LIBERO.git ~/Documents/coder/LIBERO   # once, outside the repo (pin: cluster/setup.sh)
+export LIBERO_ROOT=~/Documents/coder/LIBERO   # local shell only; .env holds the cluster path
+uv run pytest -q                     # mocked CPU-only tests (test_vilt needs LIBERO_ROOT)
 git config core.hooksPath cluster/hooks   # local, once per clone (shared by worktrees)
 cp .env.example .env                 # cluster keys + paths (git-ignored, synced); copy into each new worktree
 curl -LsSf https://astral.sh/uv/install.sh | sh   # on FASRC, once
 bash cluster/setup.sh                # on FASRC, once per synced <exp> dir: LIBERO clone + sim deps
 ```
 
-Local runs on macOS need `MUJOCO_GL=cgl LIBERO_ROOT=../LIBERO PYTHONPATH=.:../LIBERO device=mps|cpu`.
+Local runs on macOS need `MUJOCO_GL=cgl PYTHONPATH=.:$LIBERO_ROOT device=mps|cpu`.
 
 Pull results when needed (skip checkpoints):
 `rsync -az --exclude '*.pt' fasrc:<RCE_OUT_ROOT>/<exp>/<ablation>/ outputs/<exp>/<ablation>/`
 
 ## Run (humans only)
 
-1. Work in a worktree: `git worktree add ../<exp> -b <exp>`.
+1. Work in a worktree (from the main checkout): `git worktree add .claude/worktrees/<exp> -b <exp>`, then copy `.env` in.
 2. Add a line containing `` `<ablation>` `` to [EXPERIMENT_LOG.md](EXPERIMENT_LOG.md) saying what it tests. The launcher refuses unlogged names.
 3. Commit (syncs), then launch on a login node:
    ```bash

@@ -79,3 +79,25 @@ def test_array_probes_saved_per_task(cfg, libero_root, fake_tasks):
     maps = np.load(Path(cfg.run_dir) / "probes/test/libero_spatial/task_a.npz")
     np.testing.assert_allclose(maps["map/vlm/l0/lang"], [0.25, 0.75])
     assert (Path(cfg.run_dir) / "probes/train/libero_spatial/task_b.npz").exists()
+
+
+def test_probe_traces_over_time(cfg, libero_root, fake_tasks):
+    class Counted(NoOpPolicy):
+        def reset(self):
+            self.n = 0
+
+        def predict_action(self, obs):
+            if self.probing:
+                self.record({"attn/t": float(self.n), "map/m": np.array([self.n, -self.n], dtype=float)})
+            self.n += 1
+            return super().predict_action(obs)
+
+    cfg.eval.probe_every, cfg.eval.patch_px = 2, 4  # probed calls 0, 2: env steps 0 and 4 (2 actions per call)
+    evaluate(Counted(action_horizon=4), cfg, libero_root)
+    b = np.load(Path(cfg.run_dir) / "probes/test/libero_spatial/task_b.npz")  # 2 episodes x 3 calls, never succeeds
+    np.testing.assert_array_equal(b["trace/attn/t"], [[0, 2], [0, 2]])  # [episodes, probed calls]
+    np.testing.assert_array_equal(b["trace/step"], [[0, 4], [0, 4]])
+    assert b["trace/map/m"].shape == (2, 2, 2) and b["trace/gripper"].shape == (2, 2, 2)
+    assert b["attn/t"] == 1.0  # episode mean = mean over probed calls
+    a = np.load(Path(cfg.run_dir) / "probes/test/libero_spatial/task_a.npz")  # succeeds after 2 calls: 1 probed
+    assert a["trace/attn/t"].shape == (2, 1)

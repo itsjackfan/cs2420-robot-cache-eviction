@@ -22,7 +22,8 @@ success rate. Measure systems cost (FLOPs, bytes, intensity, latency, memory) as
 
 ## Experiments
 `<exp>` = short descriptive name of the hypothesis/goal, used everywhere:
-- Worktree + branch `<exp>`: `git worktree add ../<exp> -b <exp>`.
+- Worktree + branch `<exp>`, always under `.claude/worktrees/` (git-ignored by main), from the main checkout:
+  `git worktree add .claude/worktrees/<exp> -b <exp>`; copy `.env` in. A moved worktree needs `rm -rf .venv && uv sync --group sim`.
 - Outputs `$RCE_OUT_ROOT/<exp>/<ablation>/` (default `outputs/`). Never shared, never overwritten.
 - WandB run name `<exp>/<ablation>`, group `<exp>`.
 - One change per ablation. More ablations > bundled changes.
@@ -93,6 +94,8 @@ Array probes (not on WandB): `run_dir/probes/<split>/<suite>/<task>.npz` holds, 
 every probe stat plus `score`. smolvla: `map/vlm/l<i>/<q>` [K] = attention each prefix token receives from group q
 (image tokens: 8x8 grid per view, row-major, image rotated 180 deg vs raw LIBERO); `map/vlm/layout` = token counts
 [agentview, wrist, lang, state]. Beware attention sinks (a fixed token soaking up mass) when reading peaks.
+`trace/<key>` [episodes, probed calls, ...] keeps every probe stat per probed call in order (NaN-padded), with
+`trace/step` (env step) and `trace/gripper` (gripper qpos) for aligning to task phases.
 
 Rollout splits: `train` = initial states of training demos; `test` = official LIBERO init states (50 for reported numbers).
 

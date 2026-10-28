@@ -12,7 +12,7 @@ import numpy as np
 import torch
 import yaml
 
-from src.probe import patch_similarity
+from src.probe import mean_stats, patch_similarity
 
 NOOP_A = np.array([0, 0, 0, 0, 0, 0, -1], np.float32)
 
@@ -76,7 +76,7 @@ def episode(env, policy, init_state_X, instruction, cfg, max_steps, record):
     # setup bookkeeping, 
     history = deque([obs_from_sim(raw)] * cfg.data.obs_horizon, maxlen=cfg.data.obs_horizon) # 1. autodrop after O; 2. double ended queue for pop/push at both ends
     rewards, frames_HWC, infer_s, timed_steps, done = [], [], 0.0, 0, False
-    calls, prev_image_VHWC = 0, None
+    calls, prev_image_VHWC, trace = 0, None, []  # trace: one dict per probed call, in order
 
     while not done and len(rewards) < max_steps:
         obs = {k: torch.from_numpy(np.stack([h[k] for h in history]))[None].to(policy.device)  # [1, O, ...]
@@ -93,6 +93,8 @@ def episode(env, policy, init_state_X, instruction, cfg, max_steps, record):
         if not policy.probing:
             infer_s += time.perf_counter() - start
             timed_steps += len(action_PA)
+        else:
+            trace.append({"step": len(rewards), "gripper": history[-1]["state"][6:], **policy.stats()})
 
         # step through each block
         for action_A in action_PA:
@@ -105,8 +107,9 @@ def episode(env, policy, init_state_X, instruction, cfg, max_steps, record):
                 break
 
     policy.probing = False
-    return dict(score=max(rewards), reward=sum(rewards), timed_steps=timed_steps, infer_s=infer_s, stats=policy.stats(),
-                video_FHWC=np.stack(frames_HWC) if record else None)
+    stats = mean_stats([{k: v for k, v in t.items() if k not in ("step", "gripper")} for t in trace])
+    return dict(score=max(rewards), reward=sum(rewards), timed_steps=timed_steps, infer_s=infer_s, stats=stats,
+                trace=trace, video_FHWC=np.stack(frames_HWC) if record else None)
 
 
 def evaluate(policy, cfg, root):
@@ -149,10 +152,21 @@ def evaluate(policy, cfg, root):
 
 
 def save_task_probes(path, eps):
-    """Mean over a task's episodes of every probe stat (scalars + arrays, e.g. attention maps) and its score."""
+    """Mean over a task's episodes of every probe stat (scalars + arrays, e.g. attention maps) and its score, plus
+    `trace/<key>` [E episodes, C probed calls, ...] in call order (NaN-padded after an episode ends), incl.
+    `trace/step` (env step of the call) and `trace/gripper` (gripper qpos [2] fed to the policy)."""
     keys = {k for e in eps for k in e["stats"]}
     if not keys:
         return
+    C = max(len(e["trace"]) for e in eps)
+    traces = {}
+    for k in {k for e in eps for t in e["trace"] for k in t}:
+        shape = next(np.shape(t[k]) for e in eps for t in e["trace"] if k in t)
+        traces[f"trace/{k}"] = arr_EC = np.full((len(eps), C, *shape), np.nan, np.float32)
+        for i, e in enumerate(eps):
+            for j, t in enumerate(e["trace"]):
+                if k in t:
+                    arr_EC[i, j] = t[k]
     path.parent.mkdir(parents=True, exist_ok=True)
-    np.savez(path, score=np.mean([e["score"] for e in eps]),
+    np.savez(path, score=np.mean([e["score"] for e in eps]), **traces,
              **{k: np.mean([e["stats"][k] for e in eps if k in e["stats"]], axis=0) for k in keys})

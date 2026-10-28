@@ -1,13 +1,13 @@
 """Policy interface. Dims: B batch, O obs horizon, P action horizon, V views (agentview, wrist), H height, W width,
 C rgb, S state (8), A action (7).
 obs = {state [B, O, S] f32, image [B, O, V, H, W, C] u8 raw, lang list[str] (B)}; batch = obs + {action [B, P, A] f32}."""
-from collections import defaultdict
 import itertools
 
-import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
+
+from src.probe import mean_stats
 
 
 class Policy(nn.Module):
@@ -21,12 +21,7 @@ class Policy(nn.Module):
     def stats(self):
         """-> {name: mean over recorded calls} since the last call (arrays: elementwise). The rollout logs scalars as
         {split}/<name> and saves arrays per task to run_dir/probes/."""
-        by_key = defaultdict(list)
-        for m in self.__dict__.pop("_probes", []):
-            for k, v in m.items():
-                by_key[k].append(v)
-        means = {k: np.mean(v, axis=0) for k, v in by_key.items()}
-        return {k: float(v) if np.ndim(v) == 0 else v for k, v in means.items()}
+        return mean_stats(self.__dict__.pop("_probes", []))
 
     def compute_loss(self, batch):
         """-> {"loss": scalar, **policy metrics}; every key is logged as {split}/{key}."""
