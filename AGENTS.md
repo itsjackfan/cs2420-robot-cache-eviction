@@ -66,7 +66,8 @@ success rate. Measure systems cost (FLOPs, bytes, intensity, latency, memory) as
   (`cluster/hooks/post-commit`; writes `.gitinfo` = branch + commit, read by the launcher). Never edit code on the cluster.
 - Launch (human only), from the synced `<exp>` dir: `uv run python cluster/launch.py <ablation> "policy=x train.lr=1e-3,1e-4"`.
   Comma values expand into a sweep (one sbatch job each); each swept config gets the suffix `<ablation>_<key>=<val>`.
-- Output dir holds `config.yaml`, `freeze.txt`, `slurm-<jobid>.out`, `metrics.jsonl`, `latest.pt`, `videos/`, `wandb/`.
+- Output dir holds `config.yaml`, `freeze.txt`, `slurm-<jobid>.out`, `metrics.jsonl`, `latest.pt`, `videos/`, `wandb/`,
+  `probes/`.
   Reusing an ablation name resumes that run.
 - WandB project `cs2420-robot-cache-eviction`.
 
@@ -85,8 +86,13 @@ success rate. Measure systems cost (FLOPs, bytes, intensity, latency, memory) as
 | `{split}/patch_{cos,reuse}` | raw-pixel patch cosine similarity between consecutive calls; fraction > 0.95 |
 
 Probe groups: vilt `spatial` (q: readout, text; k: readout, agentview, wrist, text) and `temporal` (q: readout;
-k: `lag<k>` = k-th newest cached frame); smolvla `vlm` (q: lang, state; k: agentview, wrist, lang, state) and `expert`
+k: `lag<k>` = k-th newest cached frame); smolvla `vlm` (q, k: agentview, wrist, lang, state) and `expert`
 (q: actions; k: prefix groups + actions). `lag<k>` means mix cache sizes until the queue is full (first `max_seq_len` calls).
+
+Array probes (not on WandB): `run_dir/probes/<split>/<suite>/<task>.npz` holds, per task, the mean over its episodes of
+every probe stat plus `score`. smolvla: `map/vlm/l<i>/<q>` [K] = attention each prefix token receives from group q
+(image tokens: 8x8 grid per view, row-major, image rotated 180 deg vs raw LIBERO); `map/vlm/layout` = token counts
+[agentview, wrist, lang, state]. Beware attention sinks (a fixed token soaking up mass) when reading peaks.
 
 Rollout splits: `train` = initial states of training demos; `test` = official LIBERO init states (50 for reported numbers).
 

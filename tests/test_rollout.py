@@ -1,5 +1,7 @@
 """Dims: B batch, O obs horizon, V views (agentview, wrist), H height, W width, C rgb, S state (8),
 X sim state, F video frames."""
+from pathlib import Path
+
 import numpy as np
 import torch
 
@@ -62,3 +64,18 @@ def test_probe_cadence_and_stats(cfg, libero_root, fake_tasks):
         assert m[f"{split}/attn/x"] == 1.0
         assert f"{split}/patch_cos" in m and f"{split}/patch_reuse" in m
         assert m[f"{split}/control_hz"] > 0  # timed on unprobed calls only
+
+
+def test_array_probes_saved_per_task(cfg, libero_root, fake_tasks):
+    class Mapped(NoOpPolicy):
+        def predict_action(self, obs):
+            self.record({"attn/x": 1.0, "map/vlm/l0/lang": np.array([0.25, 0.75])})
+            return super().predict_action(obs)
+
+    cfg.eval.probe_every, cfg.eval.patch_px = 1, 4  # every call probed: nothing timed
+    m = evaluate(Mapped(action_horizon=4), cfg, libero_root)
+    assert "test/control_hz" not in m and m["test/attn/x"] == 1.0
+    assert not any(k.startswith(("train/map", "test/map")) for k in m)  # arrays go to files, not WandB
+    maps = np.load(Path(cfg.run_dir) / "probes/test/libero_spatial/task_a.npz")
+    np.testing.assert_allclose(maps["map/vlm/l0/lang"], [0.25, 0.75])
+    assert (Path(cfg.run_dir) / "probes/train/libero_spatial/task_b.npz").exists()

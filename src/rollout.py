@@ -122,9 +122,10 @@ def evaluate(policy, cfg, root):
                            "test": task["init_states"][:cfg.eval.n_test]}
             for split, states_X in init_states.items():
                 eps = results.setdefault((split, suite), [])
-                for state_X in states_X:
-                    eps.append(episode(env, policy, state_X, task["instruction"], cfg, cfg.eval.max_steps[suite],
-                                       record=cfg.eval.video and not eps))
+                task_eps = [episode(env, policy, state_X, task["instruction"], cfg, cfg.eval.max_steps[suite],
+                                    record=cfg.eval.video and not eps and i == 0) for i, state_X in enumerate(states_X)]
+                eps += task_eps
+                save_task_probes(Path(cfg.run_dir) / "probes" / split / suite / f"{task['name']}.npz", task_eps)
             env.close()
     policy.train(was_training)
     metrics = {}
@@ -140,7 +141,18 @@ def evaluate(policy, cfg, root):
         if split_eps:
             metrics[f"{split}/mean_score"] = float(np.mean([e["score"] for e in split_eps]))
             metrics[f"{split}/mean_reward"] = float(np.mean([e["reward"] for e in split_eps]))
-            metrics[f"{split}/control_hz"] = sum(e["timed_steps"] for e in split_eps) / sum(e["infer_s"] for e in split_eps)
-            for k in {k for e in split_eps for k in e["stats"]}:
+            if sum(e["infer_s"] for e in split_eps) > 0:  # eval.probe_every=1 leaves no timed calls
+                metrics[f"{split}/control_hz"] = sum(e["timed_steps"] for e in split_eps) / sum(e["infer_s"] for e in split_eps)
+            for k in {k for e in split_eps for k, v in e["stats"].items() if np.ndim(v) == 0}:
                 metrics[f"{split}/{k}"] = float(np.mean([e["stats"][k] for e in split_eps if k in e["stats"]]))
     return metrics
+
+
+def save_task_probes(path, eps):
+    """Mean over a task's episodes of every probe stat (scalars + arrays, e.g. attention maps) and its score."""
+    keys = {k for e in eps for k in e["stats"]}
+    if not keys:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez(path, score=np.mean([e["score"] for e in eps]),
+             **{k: np.mean([e["stats"][k] for e in eps if k in e["stats"]], axis=0) for k in keys})

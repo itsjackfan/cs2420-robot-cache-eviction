@@ -19,12 +19,14 @@ class Policy(nn.Module):
         self.__dict__.setdefault("_probes", []).append(metrics)
 
     def stats(self):
-        """-> {name: mean over recorded calls} since the last call; logged per rollout split as {split}/<name>."""
+        """-> {name: mean over recorded calls} since the last call (arrays: elementwise). The rollout logs scalars as
+        {split}/<name> and saves arrays per task to run_dir/probes/."""
         by_key = defaultdict(list)
         for m in self.__dict__.pop("_probes", []):
             for k, v in m.items():
                 by_key[k].append(v)
-        return {k: float(np.mean(v)) for k, v in by_key.items()}
+        means = {k: np.mean(v, axis=0) for k, v in by_key.items()}
+        return {k: float(v) if np.ndim(v) == 0 else v for k, v in means.items()}
 
     def compute_loss(self, batch):
         """-> {"loss": scalar, **policy metrics}; every key is logged as {split}/{key}."""

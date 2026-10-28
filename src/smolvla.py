@@ -50,17 +50,24 @@ class SmolVLA(Policy):
 
     def probe(self, probs_BHQK):
         """Called once per layer: first the prefix pass (Q = K = prefix), then per denoise step (Q = P action tokens).
-        vlm: lang/state -> images, lang, state (text->image = proposal exp 1); expert: actions -> prefix groups."""
+        vlm: every prefix group -> every prefix group (text->text, text->image, image->image, ...), plus maps
+        `map/vlm/l<i>/<q>` [K] = attention each prefix token receives from group q (image tokens: 8x8 grid per view,
+        row-major) and `map/vlm/layout` = token counts [agentview, wrist, lang, state]. expert: actions -> prefix groups."""
         Q, K = probs_BHQK.shape[-2:]
         if Q != self.net.config.chunk_size:
             self._groups = prefix_groups(self._n_imgs, K - sum(self._n_imgs) - 1)
-            phase, q_groups, k_groups = "vlm", {q: self._groups[q] for q in ("lang", "state")}, self._groups
+            phase, q_groups, k_groups = "vlm", self._groups, self._groups
         else:
             phase, q_groups = "expert", {"actions": slice(None)}
             k_groups = {**self._groups, "actions": slice(self._groups["state"].stop, None)}  # self-attn layers only
         layer = self._calls["vlm"] if phase == "vlm" else self._calls["expert"] % self._calls["vlm"]
         self._calls[phase] += 1
-        self.record({f"attn/{phase}/l{layer}/{k}": v for k, v in attn_stats(probs_BHQK, q_groups, k_groups).items()})
+        out = {f"attn/{phase}/l{layer}/{k}": v for k, v in attn_stats(probs_BHQK, q_groups, k_groups).items()}
+        if phase == "vlm":
+            out |= {f"map/vlm/l{layer}/{q}": probs_BHQK[:, :, s].float().mean((0, 1, 2)).cpu().numpy()
+                    for q, s in q_groups.items()}
+            out["map/vlm/layout"] = np.array([g.stop - g.start for g in self._groups.values()])
+        self.record(out)
 
     def predict_action(self, obs):
         self._n_imgs, self._calls = [], {"vlm": 0, "expert": 0}

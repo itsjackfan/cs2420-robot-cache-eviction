@@ -1,8 +1,13 @@
 """SmolVLA adapter pieces that don't need the 450M checkpoint.
-Dims: B batch, O obs horizon, V views, H height, W width, C rgb, S state (8)."""
+Dims: B batch, O obs horizon, V views, H height, W width, C rgb, S state (8), Q queries, K keys."""
+from types import SimpleNamespace
+
+import numpy as np
+import pytest
 import torch
 
-from src.smolvla import prefix_groups, to_lerobot
+from src.policy import Policy
+from src.smolvla import SmolVLA, prefix_groups, to_lerobot
 
 
 def test_to_lerobot():
@@ -21,3 +26,17 @@ def test_to_lerobot():
 def test_prefix_groups():
     g = prefix_groups([64, 64], 20)
     assert g == {"agentview": slice(0, 64), "wrist": slice(64, 128), "lang": slice(128, 148), "state": slice(148, 149)}
+
+
+def test_vlm_probe_all_query_groups_and_maps():
+    p = SmolVLA.__new__(SmolVLA)  # skip loading the checkpoint
+    Policy.__init__(p)
+    p.net = SimpleNamespace(config=SimpleNamespace(chunk_size=50))
+    p._n_imgs, p._calls = [4, 4], {"vlm": 0, "expert": 0}
+    K = 4 + 4 + 3 + 1  # 2 images x 4 tokens, 3 lang tokens, state
+    p.probe(torch.full((1, 2, K, K), 1 / K))  # prefix pass, layer 0: uniform [B, H, Q, K]
+    s = p.stats()
+    for q in ("agentview", "wrist", "lang", "state"):  # image->image, text->text, text->image, ...
+        assert s[f"attn/vlm/l0/{q}->wrist"] == pytest.approx(4 / K)
+        np.testing.assert_allclose(s[f"map/vlm/l0/{q}"], np.full(K, 1 / K), rtol=1e-6)  # received attention per key
+    np.testing.assert_array_equal(s["map/vlm/layout"], [4, 4, 3, 1])

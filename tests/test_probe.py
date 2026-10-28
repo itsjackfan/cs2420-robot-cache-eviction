@@ -55,3 +55,6 @@ def test_policy_record_and_stats():
     p.record({"x": 3.0})
     assert p.stats() == {"x": 2.0, "y": 2.0}
     assert p.stats() == {}  # cleared
+    p.record({"map": np.array([1.0, 2.0])})
+    p.record({"map": np.array([3.0, 4.0])})
+    np.testing.assert_allclose(p.stats()["map"], [2.0, 3.0])  # arrays: elementwise mean
