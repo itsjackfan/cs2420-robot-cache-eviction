@@ -87,7 +87,15 @@ success rate. Measure systems cost (FLOPs, bytes, intensity, latency, memory) as
 Per-layer scalars are NOT logged to WandB (too many keys); they live in `probes/*.npz` (see below):
 `attn/<module>/l<i>/<q>-><k>` (mass from query group `q` to key group `k`) and `attn/<module>/l<i>/<q>/{entropy,top10}`
 (entropy / log(#unmasked keys); mass on the top 10% of keys).
+
+| key | meaning |
+| --- | --- |
 | `{split}/patch_{cos,reuse}` | raw-pixel patch cosine similarity between consecutive calls; fraction > 0.95 |
+| `{split}/loo/{action_dev,entropy_delta,attn_shift}` | smolvla `policy.loo=true`: one chart per metric, one line per evicted chunk (`LOO_CHUNKS`): RMS change of the executed normalized actions (same noise), change in expert entropy, TV distance of expert attention over (agentview, wrist, lang, state, actions) |
+
+Eviction = masking a chunk's prefix tokens (as if dropped from the KV cache). `policy.drop=<chunk>` evicts it for whole
+episodes (closed loop: success + all probes); `policy.loo=true` keeps the baseline rollout and reruns each probed call
+once per chunk.
 
 Probe groups: vilt `spatial` (q: readout, text; k: readout, agentview, wrist, text) and `temporal` (q: readout;
 k: `lag<k>` = k-th newest cached frame); smolvla `vlm` (q, k: agentview, wrist, lang, state) and `expert`
@@ -134,8 +142,9 @@ EXPERIMENT_LOG.md     human-written only
 - `draccus` (lerobot dep) installs a top-level `tests` package; `tests/__init__.py` keeps ours importable.
 - SLURM runs the worktree's code as it is when the job *starts*, not when submitted; don't edit a worktree with queued jobs.
 - The launcher submits each job to whichever of `cluster/launch.py:QUEUES` (`gpu_requeue`/`ydu_lab`,
-  `kempner_requeue`/`kempner_ydu_lab`) has the earliest `sbatch --test-only` start; one job = one account, and
-  `gpu_requeue` denies kempner accounts. `--constraint=a100|h100|h200` excludes MIG slices and A40s.
+  `kempner_requeue`/`kempner_ydu_lab`, `kempner_rtx`/`kempner_ydu_lab`) has the earliest `sbatch --test-only` start;
+  one job = one account, and `gpu_requeue` denies kempner accounts. `--constraint=a100|h100|h200|rtx6000pro` excludes
+  MIG slices, A40s and RTX A6000s. `kempner_rtx` (RTX PRO 6000 Blackwell, 96 GB) is not preemptible.
 - Requeue partitions preempt: jobs are requeued and resume from `latest.pt` (work since the last epoch checkpoint is
   lost). Logs append across requeues.
 - Jobs use `uv run --no-sync`; run `uv sync --group sim` yourself after changing dependencies.

@@ -40,7 +40,8 @@ def patch_similarity(prev_VHWC, cur_VHWC, patch=16, threshold=0.95):
 
 
 def attn_probs(mask_BQK, q_BQHD, k_BKHD):
-    """Softmax attention probabilities, recomputed for models that don't keep them (grouped-query K/V heads expanded)."""
+    """Softmax attention probabilities, recomputed for models that don't keep them (grouped-query K/V heads expanded).
+    Fully masked query rows (evicted tokens) -> 0."""
     k_BKHD = k_BKHD.repeat_interleave(q_BQHD.shape[2] // k_BKHD.shape[2], dim=2)
     logits_BHQK = torch.einsum("bqhd,bkhd->bhqk", q_BQHD.float(), k_BKHD.float()) * q_BQHD.shape[-1] ** -0.5
-    return logits_BHQK.masked_fill(~mask_BQK[:, None], -torch.inf).softmax(-1)
+    return logits_BHQK.masked_fill(~mask_BQK[:, None], -torch.inf).softmax(-1).nan_to_num(0.0)

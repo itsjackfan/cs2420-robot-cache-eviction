@@ -68,7 +68,8 @@ def test_sbatch_command(monkeypatch, tmp_path):
 
 def test_best_queue_picks_earliest_start(monkeypatch):
     launch, calls = load(), []
-    starts = {"gpu_requeue": "2026-10-26T21:00:00", "kempner_requeue": "2026-10-26T20:05:00"}
+    starts = {"gpu_requeue": "2026-10-26T21:00:00", "kempner_requeue": "2026-10-26T20:05:00",
+              "kempner_rtx": "2026-10-26T20:30:00"}
 
     def run(cmd, **kw):
         calls.append(cmd)
@@ -77,7 +78,8 @@ def test_best_queue_picks_earliest_start(monkeypatch):
 
     monkeypatch.setattr(launch.subprocess, "run", run)
     assert launch.best_queue() == ("kempner_requeue", "kempner_ydu_lab")
-    assert all("--test-only" in c for c in calls) and len(calls) == 2
+    assert all("--test-only" in c for c in calls) and len(calls) == 3
+    assert ("kempner_rtx", "kempner_ydu_lab") in launch.QUEUES
 
 
 def test_submits_to_best_queue(launch):

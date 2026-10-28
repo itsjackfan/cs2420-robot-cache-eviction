@@ -15,7 +15,8 @@ from src.config import compose  # noqa: E402
 
 LOG = ROOT / "EXPERIMENT_LOG.md"
 OUT = Path(os.environ.get("RCE_OUT_ROOT", ROOT / "outputs"))
-QUEUES = [("gpu_requeue", "ydu_lab"), ("kempner_requeue", "kempner_ydu_lab")]  # gpu_requeue denies kempner_* accounts
+# gpu_requeue denies kempner_* accounts; kempner_rtx = RTX PRO 6000 (Blackwell), not preemptible
+QUEUES = [("gpu_requeue", "ydu_lab"), ("kempner_requeue", "kempner_ydu_lab"), ("kempner_rtx", "kempner_ydu_lab")]
 
 
 def git_info():

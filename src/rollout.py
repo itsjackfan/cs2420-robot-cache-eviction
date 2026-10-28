@@ -18,6 +18,16 @@ from src.probe import mean_stats, patch_similarity
 NOOP_A = np.array([0, 0, 0, 0, 0, 0, -1], np.float32)
 LAYER_KEY = re.compile(r"(.+/l\d+)/(\w+)->(\w+)$")  # "<module>/l<i>/<query group>-><key group>"
 CHART_QUERIES = ("all", "actions", "readout")  # the query group that summarizes a layer -> its WandB chart
+LOO_KEY = re.compile(r"loo/(\w+)/(\w+)$")  # "loo/<chunk>/<metric>" -> chart loo/<metric>, one line per chunk
+CHARTED = re.compile(r"/l\d+/|^loo/")  # stats that go to WandB only as charts (all of them stay in probes/*.npz)
+
+
+def chart_of(key):
+    """-> (chart name, series name) for a traced stat that is charted, else None."""
+    if (m := LAYER_KEY.match(key)) and m[2] in CHART_QUERIES:
+        return m[1], m[3]
+    if m := LOO_KEY.match(key):
+        return f"loo/{m[2]}", m[1]
 
 
 def configure_libero():
@@ -149,7 +159,7 @@ def evaluate(policy, cfg, root):
             metrics[f"{split}/mean_reward"] = float(np.mean([e["reward"] for e in split_eps]))
             if sum(e["infer_s"] for e in split_eps) > 0:  # eval.probe_every=1 leaves no timed calls
                 metrics[f"{split}/control_hz"] = sum(e["timed_steps"] for e in split_eps) / sum(e["infer_s"] for e in split_eps)
-            for k in {k for e in split_eps for k, v in e["stats"].items() if np.ndim(v) == 0 and not re.search(r"/l\d+/", k)}:
+            for k in {k for e in split_eps for k, v in e["stats"].items() if np.ndim(v) == 0 and not CHARTED.search(k)}:
                 metrics[f"{split}/{k}"] = float(np.mean([e["stats"][k] for e in split_eps if k in e["stats"]]))
             metrics |= {f"{split}/{k}": v for k, v in layer_charts(split_eps).items()}
     return metrics
@@ -166,13 +176,12 @@ def per_call(eps, key):
 
 
 def layer_charts(eps):
-    """Per-layer scalars stay in probes/*.npz; WandB gets one chart per layer: x = env step of each probed call,
-    one series per key group of that layer's CHART_QUERIES group -> {"<module>/l<i>": {"xs": [C], "ys": {group: [C]}}}."""
+    """WandB charts over env steps of the probed calls (see chart_of): one per layer (series = key groups of its
+    CHART_QUERIES group) and one per leave-one-out metric (series = chunks) -> {name: {"xs": [C], "ys": {series: [C]}}}."""
     charts = defaultdict(dict)
     for key in sorted({k for e in eps for t in e["trace"] for k in t}):
-        m = LAYER_KEY.match(key)
-        if m and m[2] in CHART_QUERIES:
-            charts[m[1]][m[3]] = per_call(eps, key)
+        if c := chart_of(key):
+            charts[c[0]][c[1]] = per_call(eps, key)
     return {k: {"xs": per_call(eps, "step"), "ys": ys} for k, ys in charts.items()}
 
 

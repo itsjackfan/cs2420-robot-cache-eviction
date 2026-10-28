@@ -4,6 +4,9 @@ policy:
   _target_: src.smolvla.SmolVLA
   repo_id: HuggingFaceVLA/smolvla_libero
   device: ${device}
+  drop: null          # evict one context chunk (src/smolvla.py:LOO_CHUNKS) for whole episodes
+  loo: false          # on probed calls, rerun once per evicted chunk (same noise) -> loo/<chunk>/<metric>
+  loo_steps: ${eval.n_action_steps}  # action_dev over the executed part of the chunk
 data: {obs_horizon: 1, action_horizon: 50}
 eval: {n_action_steps: 10, camera_px: 256}
 train: {epochs: 0}

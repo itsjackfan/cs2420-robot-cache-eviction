@@ -46,6 +46,8 @@ def test_attn_probs_matches_softmax_with_gqa():
     logits_BHQK = torch.einsum("bqhd,bkhd->bhqk", q_BQHD, k_BKHD_full) * D**-0.5
     ref_BHQK = logits_BHQK.masked_fill(~mask_BQK[:, None], -torch.inf).softmax(-1)
     torch.testing.assert_close(probs_BHQK, ref_BHQK)
+    mask_BQK[:, 0] = False  # a fully masked query row (evicted token) -> zeros, not NaN
+    assert (attn_probs(mask_BQK, q_BQHD, k_BKHD)[:, :, 0] == 0).all()
 
 
 def test_policy_record_and_stats():

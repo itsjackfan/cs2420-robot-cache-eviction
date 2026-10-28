@@ -3,6 +3,7 @@ X sim state, F video frames."""
 from pathlib import Path
 
 import numpy as np
+import pytest
 import torch
 
 from src.policy import NoOpPolicy
@@ -122,3 +123,17 @@ def test_one_chart_per_layer_instead_of_layer_scalars(cfg, libero_root, fake_tas
     np.testing.assert_allclose(chart["ys"]["agentview"], [0.0, 0.1, 0.2])  # mean over episodes per call index
     assert not any("/l0/" in k for k in m)  # per-layer scalars stay in probes/*.npz
     assert m["test/patch_cos"] is not None
+
+
+def test_leave_one_out_chart_per_metric(cfg, libero_root, fake_tasks):
+    class Loo(NoOpPolicy):
+        def predict_action(self, obs):
+            if self.probing:
+                self.record({"loo/wrist/action_dev": 0.2, "loo/lang/action_dev": 0.7, "loo/wrist/entropy_delta": -0.1})
+            return super().predict_action(obs)
+
+    cfg.eval.probe_every, cfg.eval.patch_px = 1, 4
+    m = evaluate(Loo(action_horizon=4), cfg, libero_root)
+    assert set(m["test/loo/action_dev"]["ys"]) == {"wrist", "lang"}  # one chart per metric, one line per chunk
+    assert m["test/loo/action_dev"]["ys"]["lang"][0] == pytest.approx(0.7)
+    assert "test/loo/entropy_delta" in m and "test/loo/wrist/action_dev" not in m
