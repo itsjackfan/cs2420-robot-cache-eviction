@@ -12,6 +12,7 @@ fi
 
 BASE="policy=smolvla eval.n_train=0 eval.n_test=5 eval.probe_every=1"
 launch() { SBATCH_TIMELIMIT=$1 uv run --no-sync python cluster/launch.py "$2" "$BASE $3"; }
-launch 10:00:00 smolvla-loo-attnmask "policy.loo=true eval.probe_every=2"
-launch 04:00:00 smolvla-loo-attnmask "policy.drop=agentview,wrist,lang,state,sinks,random4"
+# limits ~2x the last kempner_rtx runs: drops took 14-17 min, LOO ~3 min/task (expect ~45 min with 15 chunks)
+launch 01:30:00 smolvla-loo-attnmask "policy.loo=true eval.probe_every=2"
+launch 00:30:00 smolvla-loo-attnmask "policy.drop=agentview,wrist,lang,state,sinks,random4"
 squeue -u "$USER" -o "%i %j %P %T %l"
