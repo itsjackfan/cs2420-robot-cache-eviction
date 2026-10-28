@@ -12,3 +12,9 @@ Failed arms: branch, code changes, why it failed. -->
     Changes: everything was built a la CS2243
     Expected: works
     Results: 
+
+## attn-probe (branch: attn-probe)
+- 2026-10-27 23:44 — `smolvla-attn-maps`: testing the attention scores and entropy of SmolVLA while solving specific tasks to see if there are specific patches that are more relevant or provide a potential inkling into a reasoning latent space for visual policies
+    Changes: add attn mapping and score metrics across SmolVLA; download SmolVLA and write ViLT policy for rollouts
+    Expected: specific segments are important across different layers and different timesteps, implying that there are more important attention scores 
+    Results: 
