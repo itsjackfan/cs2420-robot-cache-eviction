@@ -2,8 +2,9 @@
 Dims: B batch, O obs horizon, V views, H height, W width, C rgb, S state (8), A action (7), P action chunk (50),
 Q queries, K keys, D head dim, G expert key groups (5). VLM prefix tokens: [agentview img, wrist img, lang, state];
 the action expert's P noisy-action tokens attend to the prefix KV cache at each of `num_steps` flow-matching steps.
-Context chunks (LOO_CHUNKS) are evicted by masking their prefix tokens: nothing attends to them, as if dropped from
-the KV cache. `drop` evicts one chunk for whole episodes; `loo` reruns every probed call once per evicted chunk."""
+Context chunks (LOO_CHUNKS) are evicted by masking their prefix tokens as attention keys only: nothing attends to
+them, as if dropped from the KV cache, while every token keeps its position (RoPE ids come from the untouched pad mask).
+`drop` evicts one chunk for whole episodes; `loo` reruns every probed call once per evicted chunk."""
 import numpy as np
 import torch
 from einops import rearrange
@@ -12,8 +13,9 @@ from src.policy import Policy
 from src.probe import attn_probs, attn_stats
 
 EXPERT_GROUPS = ("agentview", "wrist", "lang", "state", "actions")
-LOO_CHUNKS = ["agentview", "wrist", "lang", "state", "sinks"] + [f"{v}_q{r}{c}" for v in ("agentview", "wrist")
-                                                                  for r in (0, 1) for c in (0, 1)]
+SINK_CELLS = (7, 63)  # per view; positional sinks found in smolvla-attn-maps
+LOO_CHUNKS = ["none", "random4", "agentview", "wrist", "lang", "state", "sinks"] + [
+    f"{v}_q{r}{c}" for v in ("agentview", "wrist") for r in (0, 1) for c in (0, 1)]
 
 
 def to_lerobot(obs):
@@ -31,18 +33,34 @@ def prefix_groups(n_imgs, n_lang):
 
 def chunk_tokens(name, groups):
     """Prefix token indices of a context chunk: a prefix group, a 4x4-cell image quadrant `<view>_q<row><col>`
-    (8x8 cells per view, row-major, SmolVLA frame), or `sinks` (cells 7 and 63 of both views, the positional
-    attention sinks found in smolvla-attn-maps)."""
+    (8x8 cells per view, row-major, SmolVLA frame), `sinks` (SINK_CELLS of both views), or the controls `none`
+    (nothing) and `random4` (4 fixed random non-sink image tokens, size-matched to `sinks`)."""
     if name in groups:
         return np.arange(groups[name].start, groups[name].stop)
+    if name == "none":
+        return np.array([], dtype=int)
+    sinks = np.array([groups[v].start + c for v in ("agentview", "wrist") for c in SINK_CELLS])
     if name == "sinks":
-        return np.array([groups[v].start + c for v in ("agentview", "wrist") for c in (7, 63)])
+        return sinks
+    if name == "random4":
+        images = np.setdiff1d(np.arange(groups["agentview"].start, groups["wrist"].stop), sinks)
+        return np.sort(np.random.default_rng(0).choice(images, 4, replace=False))
     view, r, c = name[:-4], int(name[-2]), int(name[-1])
     return groups[view].start + np.array([(4 * r + i) * 8 + 4 * c + j for i in range(4) for j in range(4)])
 
 
+def evict_keys(mask_BQK, idx):
+    """Attention-only eviction: no query may attend to keys `idx` (prefix positions, valid for every K >= prefix)."""
+    if len(idx) == 0:
+        return mask_BQK
+    mask_BQK = mask_BQK.clone()
+    mask_BQK[..., idx] = False
+    return mask_BQK
+
+
 class SmolVLA(Policy):
-    _record, _expert, _drops = True, None, frozenset()  # per pass: record probes; expert summaries; evicted chunks
+    # per pass: record probes; expert summaries; evicted chunks and their prefix token indices
+    _record, _expert, _drops, _drop_idx = True, None, frozenset(), np.array([], dtype=int)
 
     def __init__(self, repo_id: str, device: str, drop: str | None = None, loo: bool = False, loo_steps: int = 10):
         super().__init__()
@@ -64,17 +82,16 @@ class SmolVLA(Policy):
             return out
 
         def attend_(mask_BQK, B, head_dim, q_BQHD, k_BKHD, v):
+            mask_BQK = evict_keys(mask_BQK, self._drop_idx)
             if self.probing:
                 self.probe(attn_probs(mask_BQK, q_BQHD, k_BKHD))
             return attend(mask_BQK, B, head_dim, q_BQHD, k_BKHD, v)
 
         def embed_prefix_(*args, **kwargs):
             embs, pad_masks, att_masks = embed_prefix(*args, **kwargs)
-            if self._drops:
-                groups = prefix_groups(self._n_imgs, embs.shape[1] - sum(self._n_imgs) - 1)
-                pad_masks = pad_masks.clone()
-                pad_masks[:, np.concatenate([chunk_tokens(n, groups) for n in self._drops])] = False
-            return embs, pad_masks, att_masks
+            groups = prefix_groups(self._n_imgs, embs.shape[1] - sum(self._n_imgs) - 1)
+            self._drop_idx = np.concatenate([chunk_tokens(n, groups) for n in self._drops] + [np.array([], dtype=int)])
+            return embs, pad_masks, att_masks  # pad mask (and so every position id) untouched
 
         vlm.embed_image, vlm.eager_attention_forward, model.embed_prefix = embed_image_, attend_, embed_prefix_
 

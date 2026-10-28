@@ -7,7 +7,7 @@ import pytest
 import torch
 
 from src.policy import Policy
-from src.smolvla import LOO_CHUNKS, SmolVLA, chunk_tokens, prefix_groups, to_lerobot
+from src.smolvla import LOO_CHUNKS, SmolVLA, chunk_tokens, evict_keys, prefix_groups, to_lerobot
 
 
 def test_to_lerobot():
@@ -48,7 +48,19 @@ def test_chunk_tokens():
     np.testing.assert_array_equal(chunk_tokens("agentview_q00", g)[:5], [0, 1, 2, 3, 8])  # top-left 4x4 cells
     assert len(chunk_tokens("wrist_q11", g)) == 16 and chunk_tokens("wrist_q11", g)[0] == 64 + 4 * 8 + 4
     np.testing.assert_array_equal(chunk_tokens("sinks", g), [7, 63, 71, 127])
-    assert len(LOO_CHUNKS) == len(set(LOO_CHUNKS)) == 13
+    assert len(chunk_tokens("none", g)) == 0  # null control: same noise, nothing evicted
+    r = chunk_tokens("random4", g)  # size-matched control for sinks: fixed random non-sink image tokens
+    assert len(r) == 4 and (r < 128).all() and not set(r) & {7, 63, 71, 127}
+    np.testing.assert_array_equal(r, chunk_tokens("random4", g))
+    assert len(LOO_CHUNKS) == len(set(LOO_CHUNKS)) == 15
+
+
+def test_evict_keys_masks_attention_only():
+    mask_BQK = torch.ones(1, 3, 6, dtype=torch.bool)
+    out = evict_keys(mask_BQK, np.array([1, 4]))
+    assert (~out[..., [1, 4]]).all() and out[..., [0, 2, 3, 5]].all()  # no query can attend to evicted keys
+    assert mask_BQK.all()  # input untouched (positions come from the separate pad mask, which is never modified)
+    assert evict_keys(mask_BQK, np.array([], dtype=int)) is mask_BQK
 
 
 def test_counterfactual_pass_summarizes_expert_without_recording():
