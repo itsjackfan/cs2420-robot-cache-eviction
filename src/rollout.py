@@ -1,10 +1,11 @@
 """LIBERO rollouts -> train/test metrics. train split = initial states of training demos; test = official init states.
 Dims: O obs horizon, P action horizon, V views (agentview, wrist), H height, W width, C rgb, S state (8), A action (7),
 Q quaternion (4, xyzw), X sim state, F video frames."""
-from collections import deque
+from collections import defaultdict, deque
 from functools import partial
 from pathlib import Path
 import os
+import re
 import time
 
 import h5py
@@ -15,6 +16,8 @@ import yaml
 from src.probe import mean_stats, patch_similarity
 
 NOOP_A = np.array([0, 0, 0, 0, 0, 0, -1], np.float32)
+LAYER_KEY = re.compile(r"(.+/l\d+)/(\w+)->(\w+)$")  # "<module>/l<i>/<query group>-><key group>"
+CHART_QUERIES = ("all", "actions", "readout")  # the query group that summarizes a layer -> its WandB chart
 
 
 def configure_libero():
@@ -146,9 +149,31 @@ def evaluate(policy, cfg, root):
             metrics[f"{split}/mean_reward"] = float(np.mean([e["reward"] for e in split_eps]))
             if sum(e["infer_s"] for e in split_eps) > 0:  # eval.probe_every=1 leaves no timed calls
                 metrics[f"{split}/control_hz"] = sum(e["timed_steps"] for e in split_eps) / sum(e["infer_s"] for e in split_eps)
-            for k in {k for e in split_eps for k, v in e["stats"].items() if np.ndim(v) == 0}:
+            for k in {k for e in split_eps for k, v in e["stats"].items() if np.ndim(v) == 0 and not re.search(r"/l\d+/", k)}:
                 metrics[f"{split}/{k}"] = float(np.mean([e["stats"][k] for e in split_eps if k in e["stats"]]))
+            metrics |= {f"{split}/{k}": v for k, v in layer_charts(split_eps).items()}
     return metrics
+
+
+def per_call(eps, key):
+    """Mean over episodes of a traced scalar at each probed-call index -> list [C] (NaN where no episode has it)."""
+    arr_EC = np.full((len(eps), max(len(e["trace"]) for e in eps)), np.nan)
+    for i, e in enumerate(eps):
+        for j, t in enumerate(e["trace"]):
+            arr_EC[i, j] = t.get(key, np.nan)
+    with np.errstate(all="ignore"):
+        return np.nanmean(arr_EC, 0).tolist()
+
+
+def layer_charts(eps):
+    """Per-layer scalars stay in probes/*.npz; WandB gets one chart per layer: x = env step of each probed call,
+    one series per key group of that layer's CHART_QUERIES group -> {"<module>/l<i>": {"xs": [C], "ys": {group: [C]}}}."""
+    charts = defaultdict(dict)
+    for key in sorted({k for e in eps for t in e["trace"] for k in t}):
+        m = LAYER_KEY.match(key)
+        if m and m[2] in CHART_QUERIES:
+            charts[m[1]][m[3]] = per_call(eps, key)
+    return {k: {"xs": per_call(eps, "step"), "ys": ys} for k, ys in charts.items()}
 
 
 def save_task_probes(path, eps):

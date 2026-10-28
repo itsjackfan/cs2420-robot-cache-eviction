@@ -1,4 +1,5 @@
-"""WandB + run_dir/metrics.jsonl. Keys must start with train/ or test/ (metric table: AGENTS.md).
+"""WandB + run_dir/metrics.jsonl (scalars only). Keys must start with train/ or test/ (metric table: AGENTS.md).
+Values: float, video [F, H, W, C] u8, or line chart {"xs": [...], "ys": {series: [...]}}.
 Dims: F video frames, H height, W width, C rgb."""
 from pathlib import Path
 import json
@@ -29,6 +30,9 @@ class Logger:
                 path.parent.mkdir(exist_ok=True)
                 imageio.mimwrite(path, v, fps=20)
                 out[k] = wandb.Video(str(path))
+            elif isinstance(v, dict):  # line chart {"xs": [...], "ys": {series: [...]}}
+                out[k] = wandb.plot.line_series(xs=v["xs"], ys=list(v["ys"].values()), keys=list(v["ys"]), title=k,
+                                                xname="env step")
             else:
                 out[k] = float(v)
         wandb.log(out, step=step)

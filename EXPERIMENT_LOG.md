@@ -18,3 +18,6 @@ Failed arms: branch, code changes, why it failed. -->
     Changes: add attn mapping and score metrics across SmolVLA; download SmolVLA and write ViLT policy for rollouts
     Expected: specific segments are important across different layers and different timesteps, implying that there are more important attention scores 
     Results: 
+- 2026-10-28 14:42 EST — `smolvla-attn-trace`: I would like to know if there are specific patches or regions that consistently carry more information across time based on their attention scores across all layers. Thus, we should, for each timestep, be sweeping for the relative attention scores at each of the patches + text + state at various layers.
+    Changes: per-timestep attention metrics (also make one consistent plot for each layer in WandB)
+- 2026-10-28 14:42 EST — `smolvla-leave-one-out-attn-entropy`: I would like to know if there are specific patches or regions that, when removed or modified, present a significant change in attention distribution, entropy, or task success (this would signify that those images are very important at that particular timestep).

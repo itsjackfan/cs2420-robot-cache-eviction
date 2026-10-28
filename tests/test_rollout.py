@@ -101,3 +101,24 @@ def test_probe_traces_over_time(cfg, libero_root, fake_tasks):
     assert b["attn/t"] == 1.0  # episode mean = mean over probed calls
     a = np.load(Path(cfg.run_dir) / "probes/test/libero_spatial/task_a.npz")  # succeeds after 2 calls: 1 probed
     assert a["trace/attn/t"].shape == (2, 1)
+
+
+def test_one_chart_per_layer_instead_of_layer_scalars(cfg, libero_root, fake_tasks):
+    class Layered(NoOpPolicy):
+        def reset(self):
+            self.n = 0
+
+        def predict_action(self, obs):
+            if self.probing:
+                self.record({"attn/vlm/l0/all->agentview": 0.1 * self.n, "attn/vlm/l0/all->lang": 0.5,
+                             "attn/vlm/l0/lang->wrist": 0.3, "attn/vlm/l0/all/entropy": 0.9})
+            self.n += 1
+            return super().predict_action(obs)
+
+    cfg.eval.probe_every, cfg.eval.patch_px = 1, 4
+    m = evaluate(Layered(action_horizon=4), cfg, libero_root)
+    chart = m["test/attn/vlm/l0"]  # one chart per layer: x = env step, one series per key group of the `all` query
+    assert chart["xs"] == [0, 2, 4] and set(chart["ys"]) == {"agentview", "lang"}
+    np.testing.assert_allclose(chart["ys"]["agentview"], [0.0, 0.1, 0.2])  # mean over episodes per call index
+    assert not any("/l0/" in k for k in m)  # per-layer scalars stay in probes/*.npz
+    assert m["test/patch_cos"] is not None

@@ -36,3 +36,13 @@ def test_scalars_and_videos(cfg, wandb_mock, logger):
     assert path.exists() and path.is_relative_to(cfg.run_dir)
     lines = (Path(cfg.run_dir) / "metrics.jsonl").read_text().splitlines()
     assert json.loads(lines[-1]) == {"step": 7, "train/loss": 1.0}
+
+
+def test_line_charts(cfg, wandb_mock, logger):
+    chart = {"xs": [0, 10], "ys": {"agentview": [0.1, 0.2], "lang": [0.5, 0.4]}}  # series over env steps
+    logger.log({"test/attn/vlm/l0": chart, "test/mean_score": 0.5}, step=3)
+    kw = wandb_mock.plot.line_series.call_args.kwargs
+    assert kw["xs"] == [0, 10] and kw["ys"] == [[0.1, 0.2], [0.5, 0.4]] and kw["keys"] == ["agentview", "lang"]
+    assert wandb_mock.log.call_args.args[0]["test/attn/vlm/l0"] is wandb_mock.plot.line_series.return_value
+    lines = (Path(cfg.run_dir) / "metrics.jsonl").read_text().splitlines()
+    assert json.loads(lines[-1]) == {"step": 3, "test/mean_score": 0.5}  # charts live in WandB + probes/*.npz

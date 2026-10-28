@@ -82,8 +82,11 @@ success rate. Measure systems cost (FLOPs, bytes, intensity, latency, memory) as
 | `{split}/mean_reward` | mean summed episode reward |
 | `{split}/control_hz` | executed actions / policy inference seconds |
 | `{split}/<suite>/video` | first episode, mp4 (also saved in `run_dir/videos/`) |
-| `{split}/attn/<module>/l<i>/<q>-><k>` | mean attention mass from query group `q` to key group `k` in layer `i` |
-| `{split}/attn/<module>/l<i>/<q>/{entropy,top10}` | entropy / log(#unmasked keys); mass on the top 10% of keys |
+| `{split}/attn/<module>/l<i>` | one line chart per layer: x = env step of each probed call, one series per key group, attention mass from the layer's summary query (`all` = whole prefix for smolvla vlm, `actions` for expert, `readout` for vilt), mean over episodes |
+
+Per-layer scalars are NOT logged to WandB (too many keys); they live in `probes/*.npz` (see below):
+`attn/<module>/l<i>/<q>-><k>` (mass from query group `q` to key group `k`) and `attn/<module>/l<i>/<q>/{entropy,top10}`
+(entropy / log(#unmasked keys); mass on the top 10% of keys).
 | `{split}/patch_{cos,reuse}` | raw-pixel patch cosine similarity between consecutive calls; fraction > 0.95 |
 
 Probe groups: vilt `spatial` (q: readout, text; k: readout, agentview, wrist, text) and `temporal` (q: readout;

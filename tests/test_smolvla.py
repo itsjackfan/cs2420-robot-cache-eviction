@@ -36,7 +36,7 @@ def test_vlm_probe_all_query_groups_and_maps():
     K = 4 + 4 + 3 + 1  # 2 images x 4 tokens, 3 lang tokens, state
     p.probe(torch.full((1, 2, K, K), 1 / K))  # prefix pass, layer 0: uniform [B, H, Q, K]
     s = p.stats()
-    for q in ("agentview", "wrist", "lang", "state"):  # image->image, text->text, text->image, ...
+    for q in ("agentview", "wrist", "lang", "state", "all"):  # image->image, text->text, ...; all = whole prefix
         assert s[f"attn/vlm/l0/{q}->wrist"] == pytest.approx(4 / K)
         np.testing.assert_allclose(s[f"map/vlm/l0/{q}"], np.full(K, 1 / K), rtol=1e-6)  # received attention per key
     np.testing.assert_array_equal(s["map/vlm/layout"], [4, 4, 3, 1])

@@ -50,13 +50,13 @@ class SmolVLA(Policy):
 
     def probe(self, probs_BHQK):
         """Called once per layer: first the prefix pass (Q = K = prefix), then per denoise step (Q = P action tokens).
-        vlm: every prefix group -> every prefix group (text->text, text->image, image->image, ...), plus maps
+        vlm: every prefix group (+ `all` = whole prefix, the per-layer WandB chart) -> every prefix group, plus maps
         `map/vlm/l<i>/<q>` [K] = attention each prefix token receives from group q (image tokens: 8x8 grid per view,
         row-major) and `map/vlm/layout` = token counts [agentview, wrist, lang, state]. expert: actions -> prefix groups."""
         Q, K = probs_BHQK.shape[-2:]
         if Q != self.net.config.chunk_size:
             self._groups = prefix_groups(self._n_imgs, K - sum(self._n_imgs) - 1)
-            phase, q_groups, k_groups = "vlm", self._groups, self._groups
+            phase, q_groups, k_groups = "vlm", {**self._groups, "all": slice(None)}, self._groups
         else:
             phase, q_groups = "expert", {"actions": slice(None)}
             k_groups = {**self._groups, "actions": slice(self._groups["state"].stop, None)}  # self-attn layers only
