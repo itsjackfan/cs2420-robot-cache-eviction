@@ -1,0 +1,20 @@
+# @package _global_
+# KC-VLA: Octo-Small (official checkpoint) fine-tuned on [3 keyframe slots + current frame]; at rollout the stage-2
+# keyframe selector fills the slots online. Use with train=octo.
+policy:
+  _target_: src.policies.kc_vla.KCVLAPolicy.from_pretrained
+  pretrained_model_name_or_path: jackfanml/octo-small-1.5-torch
+  action_horizon: ${data.action_horizon}
+  n_keyframes: 3
+  selector_ckpt: ???  # finished policy=ksm_stage2 run: <out>/<branch>/<ablation>/latest.pt
+  threshold: 0.5      # paper grid-searches tau on its eval episodes; fixed here
+  commit_gap: 2       # inference steps below threshold before a candidate is committed
+  window: 3
+data:
+  obs_horizon: 4      # n_keyframes + 1
+  action_horizon: 4
+  task:
+    _target_: src.data.LiberoKeyframeTask
+    n_keyframes: ${policy.n_keyframes}
+eval:
+  n_action_steps: 4

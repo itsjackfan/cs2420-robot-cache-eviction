@@ -1,4 +1,5 @@
-"""SLURM launcher. Humans only: `uv run python cluster/launch.py <name> "<hydra overrides>"`.
+"""SLURM launcher. Humans only: `uv run python cluster/launch.py <name> "<hydra overrides>" [<after job id>]`.
+Prints `<run name> <job id>` per job; pass a job id as the third argument to start only after it succeeds.
 Comma-separated override values (`train.lr=1e-3,1e-4`) expand into a sweep; one sbatch job per config."""
 from pathlib import Path
 import itertools
@@ -15,7 +16,8 @@ from src.config import compose  # noqa: E402
 
 LOG = ROOT / "EXPERIMENT_LOG.md"
 OUT = Path(os.environ.get("RCE_OUT_ROOT", ROOT / "outputs"))
-QUEUES = [("gpu_requeue", "ydu_lab"), ("kempner_requeue", "kempner_ydu_lab")]  # gpu_requeue denies kempner_* accounts
+# gpu_requeue denies kempner_* accounts; kempner_rtx = RTX PRO 6000 (Blackwell), not preemptible
+QUEUES = [("gpu_requeue", "ydu_lab"), ("kempner_requeue", "kempner_ydu_lab"), ("kempner_rtx", "kempner_ydu_lab")]
 
 
 def git_info():
@@ -37,13 +39,16 @@ def best_queue():
     return min(QUEUES, key=lambda q: start(*q))
 
 
-def sbatch(run_dir, name, partition, account):
-    subprocess.run(["sbatch", f"--job-name={name}", f"--output={run_dir}/slurm-%j.out", f"--partition={partition}",
-                    f"--account={account}", str(ROOT / "cluster/run.sbatch"), str(run_dir / "config.yaml")],
-                   cwd=ROOT, check=True)
+def sbatch(run_dir, name, partition, account, after=""):
+    """-> job id. after: job id this run waits on (afterok), e.g. the run whose latest.pt it loads via init_from."""
+    dep = [f"--dependency=afterok:{after}"] if after else []
+    out = subprocess.run(["sbatch", "--parsable", f"--job-name={name}", f"--output={run_dir}/slurm-%j.out",
+                          f"--partition={partition}", f"--account={account}", *dep, str(ROOT / "cluster/run.sbatch"),
+                          str(run_dir / "config.yaml")], cwd=ROOT, check=True, capture_output=True, text=True)
+    return out.stdout.strip().split(";")[0]
 
 
-def main(name, overrides=""):
+def main(name, overrides="", after=""):
     if f"`{name}`" not in LOG.read_text():
         raise SystemExit(f"Add a line to EXPERIMENT_LOG.md containing `{name}` and what it tests before launching.")
     branch, commit, dirty = git_info()
@@ -61,7 +66,7 @@ def main(name, overrides=""):
         run_dir.mkdir(parents=True, exist_ok=True)
         OmegaConf.save(OmegaConf.create(OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True)),
                        run_dir / "config.yaml")
-        sbatch(run_dir, run_name, *best_queue())
+        print(run_name, sbatch(run_dir, run_name, *best_queue(), after=after))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,15 @@
+# Octo finetune recipe (octo scripts/configs/finetune_config.py): AdamW, 0 -> 3e-4 over 2k steps, cosine to 0 at 50k,
+# weight decay 0.01, grad clip 1.0. Batch 64 as in CS2243 octo-small-50k-b64 (octo uses 256).
+defaults:
+  - baseline
+  - _self_
+
+lr: 3.0e-4
+weight_decay: 0.01
+schedule: cosine
+warmup_steps: 2000
+max_steps: 50000
+batch_size: 64
+grad_clip: 1.0
+epochs: 1000      # step-bound: training stops at max_steps
+eval_every: 5     # epochs (~10k steps on libero_10 at batch 64)

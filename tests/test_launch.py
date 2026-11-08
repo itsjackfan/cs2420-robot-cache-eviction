@@ -56,7 +56,7 @@ def test_sweep_expands_and_separates(launch):
 
 def test_sbatch_command(monkeypatch, tmp_path):
     launch, calls = load(), []
-    monkeypatch.setattr(launch.subprocess, "run", lambda cmd, **kw: calls.append((cmd, kw)))
+    monkeypatch.setattr(launch.subprocess, "run", lambda cmd, **kw: calls.append((cmd, kw)) or MagicMock(stdout="7\n"))
     run_dir = tmp_path / "noop/base"
     launch.sbatch(run_dir, "base", "kempner_requeue", "kempner_ydu_lab")
     ((cmd, kw),) = calls
@@ -68,7 +68,8 @@ def test_sbatch_command(monkeypatch, tmp_path):
 
 def test_best_queue_picks_earliest_start(monkeypatch):
     launch, calls = load(), []
-    starts = {"gpu_requeue": "2026-10-26T21:00:00", "kempner_requeue": "2026-10-26T20:05:00"}
+    starts = {"gpu_requeue": "2026-10-26T21:00:00", "kempner_requeue": "2026-10-26T20:05:00",
+              "kempner_rtx": "2026-10-26T20:30:00"}
 
     def run(cmd, **kw):
         calls.append(cmd)
@@ -77,12 +78,23 @@ def test_best_queue_picks_earliest_start(monkeypatch):
 
     monkeypatch.setattr(launch.subprocess, "run", run)
     assert launch.best_queue() == ("kempner_requeue", "kempner_ydu_lab")
-    assert all("--test-only" in c for c in calls) and len(calls) == 2
+    assert all("--test-only" in c for c in calls) and len(calls) == 3
+    assert ("kempner_rtx", "kempner_ydu_lab") in launch.QUEUES
 
 
 def test_submits_to_best_queue(launch):
     launch.main("base")
     assert launch.sbatch.call_args.args[2:] == ("kempner_requeue", "kempner_ydu_lab")
+    assert launch.sbatch.call_args.kwargs["after"] == ""
+
+
+def test_after_chains_dependency(launch, monkeypatch, tmp_path):
+    launch.main("base", "", "4242")
+    assert launch.sbatch.call_args.kwargs["after"] == "4242"
+    calls, real = [], load()  # fixture mocks launch.sbatch; test the real one
+    monkeypatch.setattr(real.subprocess, "run", lambda cmd, **kw: calls.append(cmd) or MagicMock(stdout="99\n"))
+    assert real.sbatch(tmp_path, "x", "kempner_rtx", "kempner_ydu_lab", after="4242") == "99"
+    assert "--dependency=afterok:4242" in calls[-1] and "--parsable" in calls[-1]
 
 
 def test_git_info_from_synced_file_on_cluster(tmp_path):

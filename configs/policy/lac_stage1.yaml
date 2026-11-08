@@ -1,0 +1,20 @@
+# @package _global_
+# LAC stage 1: selector regresses the frozen fine-tuned Octo's attention to patches. Use with train=lac.
+policy:
+  _target_: src.policies.lac.LACPolicy
+  size: small
+  action_horizon: ${data.action_horizon}
+  stage: 1
+  ratios: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+  tau: 1.0        # Gumbel-softmax temperature (unspecified in the paper)
+  tau_s: 0.1      # soft top-k temperature (unspecified)
+  lam: 0.1        # weight of -E[r] (unspecified)
+  p_recover: 0.1  # per-step full-recompute probability at inference (unspecified)
+init_from: ???    # finished policy=octo_small run: <out>/<branch>/<ablation>/latest.pt
+data:
+  obs_horizon: 2  # (frame t - stride, frame t)
+  action_horizon: 4
+  task:
+    obs_stride: ${eval.n_action_steps}  # = spacing between inference steps at rollout
+eval:
+  n_action_steps: 4

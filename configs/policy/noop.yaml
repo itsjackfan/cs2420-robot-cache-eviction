@@ -1,2 +1,2 @@
-_target_: src.policy.NoOpPolicy
+_target_: src.policies.baseline.NoOpPolicy
 action_horizon: ${data.action_horizon}

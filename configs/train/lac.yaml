@@ -1,0 +1,12 @@
+# LAC selector training (both stages; recipe unspecified in the paper). Only the selector trains; Octo is frozen.
+defaults:
+  - baseline
+  - _self_
+
+lr: 1.0e-4
+schedule: cosine
+warmup_steps: 500
+max_steps: 10000
+batch_size: 32
+epochs: 1000      # step-bound
+eval_every: 1000  # epochs: final eval only

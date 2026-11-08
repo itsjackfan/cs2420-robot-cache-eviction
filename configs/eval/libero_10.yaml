@@ -1,0 +1,5 @@
+defaults:
+  - libero
+  - _self_
+
+suites: {libero_spatial: false, libero_10: true}

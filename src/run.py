@@ -6,15 +6,13 @@ import sys
 
 import numpy as np
 import torch
-from hydra.utils import instantiate
+from hydra.utils import get_method, instantiate
 from omegaconf import OmegaConf
 
-from src.data import build_datasets, resolve_root
+from src import checkpoint
+from src.data import action_stats, build_datasets, resolve_root
 from src.logger import Logger
 from src.rollout import evaluate
-from src.train import train
-
-
 def main(cfg):
     run_dir = Path(cfg.run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -22,10 +20,14 @@ def main(cfg):
     random.seed(cfg.seed), np.random.seed(cfg.seed), torch.manual_seed(cfg.seed)
     root = resolve_root(cfg)
     train_set, test_set = build_datasets(cfg, root)
-    policy = instantiate(cfg.policy).to(cfg.device)
+    policy = instantiate(cfg.policy)
+    policy.set_action_stats(*(torch.as_tensor(x, dtype=torch.float32) for x in action_stats(train_set)))
+    if cfg.get("init_from"):  # a finished run's latest.pt; keys absent there (new modules) keep their init
+        policy.load_state_dict(checkpoint.load(cfg.init_from)["policy"], strict=False)
+    policy.to(cfg.device)
     logger = Logger(cfg)
     evaluate_fn = partial(evaluate, cfg=cfg, root=root)
-    step = train(cfg, policy, train_set, test_set, logger, evaluate_fn)
+    step = get_method(cfg.train.loop)(cfg, policy, train_set, test_set, logger, evaluate_fn)
     logger.log(evaluate_fn(policy), step)
     logger.finish()
 

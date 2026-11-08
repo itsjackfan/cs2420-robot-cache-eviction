@@ -46,10 +46,12 @@ success rate. Measure systems cost (FLOPs, bytes, intensity, latency, memory) as
   C rgb, S state (8 = eef pos 3 + axis-angle 3 + gripper 2), A action (7), N demo length, X sim state, F video frames.
 - Batch schema (`src/data.py` and `src/rollout.py:obs_from_sim` must agree): `state [B,O,S] f32`,
   `image [B,O,V,H,W,C] u8` raw (the policy normalizes), `lang list[str]`, `action [B,P,A] f32`.
-- Policies subclass `src.policy.Policy` (nn.Module): `compute_loss(batch) -> {"loss", **metrics}`,
+- Policies subclass `src.policies.baseline.Policy` (nn.Module + HF `PyTorchModelHubMixin`): `compute_loss(batch) -> {"loss", **metrics}`,
   `predict_action(obs) -> [B,P,A]`, `reset()` (called at every episode start; clear any observation cache there).
-- Hotswap models and objectives through Hydra groups `configs/{policy,data,eval,train}/<x>.yaml` with `_target_`; a new
-  model or objective is a new yaml + class, never a flag. Data/eval gates: `data.sources.<suite>`, `eval.suites.<suite>`.
+- Hotswap models and objectives through Hydra groups `configs/{policy,data,eval,train}/<x>.yaml`; a new model or
+  objective is a new file + yaml, never a flag. Policy: `src/policies/<x>.py` + `configs/policy/<x>.yaml` (`_target_`).
+  Training loop: `src/training/<x>.py:train` + `configs/train/<x>.yaml` (`loop:`). `baseline.py` in each = reference.
+  Data/eval gates: `data.sources.<suite>`, `eval.suites.<suite>`.
 - Observation history / cache management during rollouts: `src/rollout.py:episode` (marked `NOTE`).
 - Checkpoints: `src.checkpoint.save` (atomic) to `run_dir/latest.pt`; every training loop must be resumable.
 
@@ -79,11 +81,13 @@ Rollout splits: `train` = initial states of training demos; `test` = official LI
 ```text
 cluster/launch.py     launcher (log gate, sweeps, per-exp output dirs, sbatch)
 cluster/run.sbatch    one SLURM job: python -m src.run <run_dir>/config.yaml
-cluster/setup.sh      once per synced <exp> dir: LIBERO clone + uv sync --group sim
+cluster/setup.sh      once per synced <exp> dir: LIBERO clone (deps: shared venv ~/venvs/cs2420-rce)
 cluster/hooks/        post-commit: rsync worktree to FASRC (enable: git config core.hooksPath cluster/hooks)
 configs/              Hydra: config.yaml + policy/ data/ eval/ train/ groups
 src/run.py            one run: data -> policy -> train -> final eval
-src/{data,policy,rollout,logger,checkpoint,train,config}.py
+src/policies/         Policy interface + NoOpPolicy (baseline.py); one file per policy family
+src/training/         training loops (baseline.py: scaffolding + make_optimizer/update); one file per loop
+src/{data,rollout,logger,checkpoint,config}.py
 tests/                shape + smoke tests, mocked, CPU-only; tests/test_train.py = training-loop contract
 scripts/tmp_<exp>/    throwaway scripts (delete after use)
 results/              small reported tables/plots only
@@ -96,8 +100,10 @@ EXPERIMENT_LOG.md     human-written only
 - Python 3.12 forces `mujoco` 3.x (pinned 3.1.6) under `robosuite==1.4.1`; verify the sim on the first smoke run.
 - SLURM runs the worktree's code as it is when the job *starts*, not when submitted; don't edit a worktree with queued jobs.
 - The launcher submits each job to whichever of `cluster/launch.py:QUEUES` (`gpu_requeue`/`ydu_lab`,
-  `kempner_requeue`/`kempner_ydu_lab`) has the earliest `sbatch --test-only` start; one job = one account, and
-  `gpu_requeue` denies kempner accounts. `--constraint=a100|h100|h200` excludes MIG slices and A40s.
+  `kempner_requeue`/`kempner_ydu_lab`, `kempner_rtx`/`kempner_ydu_lab` (not preemptible)) has the earliest `sbatch --test-only` start; one job = one account, and
+  `gpu_requeue` denies kempner accounts. `--constraint=a100|h100|h200|rtx6000pro` excludes MIG slices and A40s.
 - Requeue partitions preempt: jobs are requeued and resume from `latest.pt` (work since the last epoch checkpoint is
   lost). Logs append across requeues.
-- Jobs use `uv run --no-sync`; run `uv sync --group sim` yourself after changing dependencies.
+- All worktrees share one venv, `~/venvs/cs2420-rce` (`UV_PROJECT_ENVIRONMENT`); jobs never sync it. After changing
+  dependencies, update it yourself: `UV_PROJECT_ENVIRONMENT=~/venvs/cs2420-rce uv sync --group sim --inexact`. On the
+  login node, launch with `UV_PROJECT_ENVIRONMENT=~/venvs/cs2420-rce uv run --no-sync --frozen python cluster/launch.py ...`.

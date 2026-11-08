@@ -1,0 +1,9 @@
+# @package _global_
+# LAC stage 2: joint selector + ratio training against the frozen Octo's diffusion loss. Use with train=lac.
+defaults:
+  - lac_stage1
+  - _self_
+
+policy:
+  stage: 2
+init_from: ???    # finished policy=lac_stage1 run: <out>/<branch>/<ablation>/latest.pt (Octo + selector)

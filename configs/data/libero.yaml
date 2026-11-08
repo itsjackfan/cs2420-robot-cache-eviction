@@ -4,6 +4,9 @@ download_dir: ${oc.env:RCE_DATA_DIR,data}/LIBERO  # downloaded once, shared by a
 obs_horizon: 2
 action_horizon: 16
 val_ratio: 0.1                          # last demos of each task -> test/loss
+task:                                   # per-file dataset class (src/data.py)
+  _target_: src.data.LiberoTask
+  _partial_: true
 sources:                                # gates
   libero_spatial: true
   libero_object: false

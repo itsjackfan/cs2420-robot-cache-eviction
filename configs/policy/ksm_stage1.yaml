@@ -1,0 +1,14 @@
+# @package _global_
+# KC-VLA keyframe selector stage 1: ResNet-18 triplet metric learning on agentview keyframes. Use with train=ksm_stage1.
+policy:
+  _target_: src.policies.kc_vla.KeyframeSelector
+  stage: 1
+  dim: 128
+  pretrained: true  # ImageNet init
+data:
+  task:
+    _target_: src.data.KeyframeTriplets
+    repeats: 20
+    delta: [5, 30]  # temporal-neighbour negatives (delta_min/max unspecified in the paper)
+eval:
+  suites: {libero_spatial: false, libero_object: false, libero_goal: false, libero_10: false, libero_90: false}

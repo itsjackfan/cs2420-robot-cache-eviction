@@ -2,7 +2,7 @@
 S state (8), A action (7)."""
 import numpy as np
 
-from src.data import build_datasets, resolve_root
+from src.data import action_stats, build_datasets, resolve_root
 
 
 def test_sizes_and_val_split_use_last_demos(cfg, libero_root):
@@ -28,6 +28,14 @@ def test_sample_schema_and_padding(cfg, libero_root):
     assert (state_OS[:, 0] == [0, 0]).all()  # obs window padded by repeating first frame
     assert (image_OVHWC[:, 1] == 1).all()  # view 1 = wrist
     assert (train[8]["action"][:, 0] == [8, 9, 9, 9]).all()  # action window padded by repeating last action
+
+
+def test_action_stats_over_train_demos(cfg, libero_root):
+    train, _ = build_datasets(cfg, libero_root)
+    mean_A, std_A = action_stats(train)
+    actions_N = np.concatenate([100 * d + np.arange(10) for d in range(3)] * 2)  # 2 tasks x train demos 0-2
+    assert mean_A.shape == std_A.shape == (7,)
+    assert np.allclose(mean_A, actions_N.mean()) and np.allclose(std_A, actions_N.std())
 
 
 def test_download_when_no_root(cfg, libero_root, monkeypatch):

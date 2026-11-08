@@ -1,0 +1,16 @@
+# @package _global_
+# KC-VLA keyframe selector stage 2: frozen encoder + FiLM phase query network (BCE). Use with train=ksm_stage2.
+policy:
+  _target_: src.policies.kc_vla.KeyframeSelector
+  stage: 2
+  dim: 128
+  pretrained: false  # encoder comes from init_from
+init_from: ???       # finished policy=ksm_stage1 run: <out>/<branch>/<ablation>/latest.pt
+data:
+  task:
+    _target_: src.data.KeyframeWindows
+    window: 3
+    stride: ${eval.n_action_steps}  # selector windows are consecutive inference steps at rollout
+    negatives: 4                    # equidistant in-phase negatives (M unspecified in the paper)
+eval:
+  suites: {libero_spatial: false, libero_object: false, libero_goal: false, libero_10: false, libero_90: false}

@@ -14,6 +14,19 @@ def test_noop_baseline_end_to_end(cfg, fake_tasks, wandb_mock):
     wandb_mock.finish.assert_called_once()
 
 
+def test_init_from_loads_policy_weights(cfg, fake_tasks, wandb_mock, tmp_path, monkeypatch):
+    import torch
+    from omegaconf import open_dict
+    from src import checkpoint
+    checkpoint.save(tmp_path / "src.pt", policy={"dummy": torch.tensor(3.0)})
+    with open_dict(cfg):
+        cfg.init_from = str(tmp_path / "src.pt")
+    seen = []
+    monkeypatch.setattr("src.run.evaluate", lambda policy, cfg, root: seen.append(policy.dummy.item()) or {})
+    main(cfg)
+    assert seen == [3.0]
+
+
 def test_cli_loads_config(cfg, tmp_path, monkeypatch):
     seen = []
     monkeypatch.setattr("src.run.main", seen.append)

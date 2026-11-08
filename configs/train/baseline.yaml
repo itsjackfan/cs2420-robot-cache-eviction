@@ -1,0 +1,11 @@
+loop: src.training.baseline.train   # hotswap: path to any train(cfg, policy, train_set, test_set, logger, evaluate)
+epochs: 0         # 0 = eval only (no-op baseline)
+max_steps: null   # cap on total optimizer steps (smoke/pilot runs)
+batch_size: 64
+lr: 1.0e-4
+weight_decay: 0.01  # AdamW, weight matrices only
+schedule: constant  # constant | cosine (to 0 at max_steps)
+warmup_steps: 0     # linear warmup from 0
+grad_clip: 1.0
+num_workers: 4
+eval_every: 10    # epochs

@@ -3,8 +3,20 @@ name = "rce"
 version = "0.1.0"
 description = "Observation caching / cache eviction for robot policies on LIBERO, run on FASRC (SLURM)"
 requires-python = ">=3.12,<3.13"
-dependencies = ["torch", "numpy", "einops", "h5py", "hydra-core", "wandb", "huggingface_hub", "imageio[ffmpeg]",
-                "pyyaml"]
+dependencies = [
+    "torch",
+    "numpy",
+    "einops",
+    "h5py",
+    "hydra-core",
+    "wandb",
+    "huggingface_hub",
+    "imageio[ffmpeg]",
+    "pyyaml",
+    "safetensors>=0.8.0",
+    "transformers>=5",
+    "torchvision>=0.26",
+]
 
 [dependency-groups]
 dev = ["pytest"]
