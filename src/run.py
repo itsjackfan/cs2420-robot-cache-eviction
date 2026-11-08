@@ -10,7 +10,7 @@ from hydra.utils import get_method, instantiate
 from omegaconf import OmegaConf
 
 from src import checkpoint
-from src.data import action_stats, build_datasets, resolve_root
+from src.data import action_stats, build_datasets, resolve_root, stage
 from src.logger import Logger
 from src.rollout import evaluate
 def main(cfg):
@@ -18,7 +18,7 @@ def main(cfg):
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "config.yaml").write_text(OmegaConf.to_yaml(cfg))
     random.seed(cfg.seed), np.random.seed(cfg.seed), torch.manual_seed(cfg.seed)
-    root = resolve_root(cfg)
+    root = stage(resolve_root(cfg), cfg)
     train_set, test_set = build_datasets(cfg, root)
     policy = instantiate(cfg.policy)
     policy.set_action_stats(*(torch.as_tensor(x, dtype=torch.float32) for x in action_stats(train_set)))

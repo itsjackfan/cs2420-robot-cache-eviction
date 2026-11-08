@@ -29,14 +29,18 @@ def configure_libero():
 
 def libero_tasks(suite):
     configure_libero()
-    from libero.libero import benchmark
+    from libero.libero import benchmark, get_libero_path
     from libero.libero.envs import OffScreenRenderEnv
     bench = benchmark.get_benchmark_dict()[suite](task_order_index=0)
     tasks = []
     for i in range(bench.get_num_tasks()):
         task = bench.get_task(i)
+        # bench.get_task_init_states uses torch.load's weights_only=True default (torch >= 2.6), which rejects these
+        # numpy pickles from the pinned LIBERO clone
+        init_states = torch.load(Path(get_libero_path("init_states")) / task.problem_folder / task.init_states_file,
+                                 weights_only=False)
         # 128px cameras match the HDF5 demo images
-        tasks.append(dict(name=task.name, instruction=task.language, init_states=bench.get_task_init_states(i),
+        tasks.append(dict(name=task.name, instruction=task.language, init_states=init_states,
                           make_env=partial(OffScreenRenderEnv, bddl_file_name=bench.get_task_bddl_file_path(i),
                                            camera_heights=128, camera_widths=128)))
     return tasks

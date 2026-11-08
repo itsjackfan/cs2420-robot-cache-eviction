@@ -55,6 +55,14 @@ def test_lr_warmup_cosine_and_decay_groups(cfg):
     assert len(decayed) == 1 and sum(len(g["params"]) for g in optimizer.param_groups) == len(list(net.parameters()))
 
 
+def test_resume_at_max_steps_trains_no_more(cfg, libero_root, wandb_mock):
+    from src.logger import Logger
+    Path(cfg.run_dir).mkdir(parents=True)
+    cfg.train.max_steps = 3
+    assert run(cfg, libero_root, Logger(cfg), epochs=5) == 3
+    assert run(cfg, libero_root, Logger(cfg), epochs=5) == 3
+
+
 def test_resumes_from_latest(cfg, libero_root, wandb_mock):
     from src.logger import Logger
     Path(cfg.run_dir).mkdir(parents=True)

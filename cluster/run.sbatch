@@ -16,5 +16,9 @@ export HF_HUB_CACHE="${HF_HUB_CACHE:-/n/netscratch/ydu_lab/Lab/$USER/hf/hub}"  #
 export TORCH_HOME="${TORCH_HOME:-/n/holylabs/ydu_lab/Lab/$USER/torch}"            # torchvision weights (RAFT, ResNet)
 # one shared project venv for every worktree; never synced by jobs (freeze.txt records what actually ran)
 export UV_PROJECT_ENVIRONMENT="${UV_PROJECT_ENVIRONMENT:-$HOME/venvs/cs2420-rce}"
+# node-local copy of the gated LIBERO suites (src/data.py:stage); netscratch random reads are ~50x slower
+local_root=/scratch; [ -d "$local_root" ] || local_root=/tmp
+export RCE_STAGE_DIR="$local_root/$USER/rce-$SLURM_JOB_ID"
+trap 'rm -rf "$RCE_STAGE_DIR"' EXIT
 uv pip freeze --python "$UV_PROJECT_ENVIRONMENT" > "$(dirname "$1")/freeze.txt"
 uv run --no-sync --frozen python -m src.run "$1"

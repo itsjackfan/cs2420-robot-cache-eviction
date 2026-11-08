@@ -58,7 +58,10 @@ def train(cfg, policy, train_set, test_set, logger, evaluate):
     loader = DataLoader(train_set, cfg.train.batch_size, shuffle=True, drop_last=True, num_workers=cfg.train.num_workers)
     test_loader = DataLoader(test_set, cfg.train.batch_size, num_workers=cfg.train.num_workers)
 
+    done = lambda: cfg.train.max_steps is not None and step >= cfg.train.max_steps  # resume may start at the cap
     for epoch in range(start_epoch, cfg.train.epochs):
+        if done():
+            break
         policy.train()
         for batch in loader:
             out = update(cfg, policy, optimizer, to_device(batch, cfg.device))
@@ -66,7 +69,7 @@ def train(cfg, policy, train_set, test_set, logger, evaluate):
             step += 1
             logger.log({**{f"train/{k}": v.item() for k, v in out.items()}, "train/lr": optimizer.param_groups[0]["lr"],
                         "train/epoch": epoch, "train/step": step}, step)
-            if step == cfg.train.max_steps:
+            if done():
                 break
                 
         policy.eval()
@@ -77,6 +80,4 @@ def train(cfg, policy, train_set, test_set, logger, evaluate):
             logger.log(evaluate(policy), step)
         checkpoint.save(path, policy=policy.state_dict(), optimizer=optimizer.state_dict(), scheduler=scheduler.state_dict(),
                         epoch=epoch + 1, step=step)
-        if step == cfg.train.max_steps:
-            break
     return step

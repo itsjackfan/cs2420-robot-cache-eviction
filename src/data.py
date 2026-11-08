@@ -4,7 +4,9 @@ S state (8 = eef pos 3 + axis-angle 3 + gripper 2), A action (7), K window lengt
 from pathlib import Path
 import json
 import math
+import os
 import random
+import shutil
 
 import h5py
 import numpy as np
@@ -19,6 +21,17 @@ def resolve_root(cfg):
     suites = sorted({s for gates in (cfg.data.sources, cfg.eval.suites) for s, on in gates.items() if on})
     return Path(snapshot_download(cfg.data.repo_id, repo_type="dataset", local_dir=cfg.data.download_dir,
                                   allow_patterns=[f"{s}/*" for s in suites]))
+
+
+def stage(root, cfg):
+    """Copy the gated suites to node-local disk ($RCE_STAGE_DIR, set per job by cluster/run.sbatch) and return that
+    root: random frame reads from netscratch are ~50x slower than from local disk. No-op when unset."""
+    if not os.environ.get("RCE_STAGE_DIR"):
+        return Path(root)
+    local = Path(os.environ["RCE_STAGE_DIR"])
+    for suite in sorted({s for gates in (cfg.data.sources, cfg.eval.suites) for s, on in gates.items() if on}):
+        shutil.copytree(Path(root) / suite, local / suite, dirs_exist_ok=True)
+    return local
 
 
 def window(ds, t_K):
