@@ -18,6 +18,6 @@ Failed arms: branch, code changes, why it failed. -->
 - 2026-11-08 17:04 `lc-smoke`: smoke to test the above infrastructure for Octo + 3 long-context adaptations
     Changes: N/A
     Expected: works
-- 2026-11-08 17:39 `lc-baseline-octo-l10` `lc-baseline-octo-l10-w2` `lc-baseline-vlacache-l10` `lc-baseline-lac-s1` `lc-baseline-lac-s2` `lc-baseline-ksm-s1` `lc-baseline-ksm-s2` `lc-baseline-kcvla-l10`: ablation suite across Octo + the 3 long-context adaptations (full runs)
+- 2026-11-08 17:39 `lc-baseline-octo-l10` `lc-baseline-octo-l10-w2` `lc-baseline-vlacache-l10` `lc-baseline-lac-s1` `lc-baseline-lac-s2` `lc-baseline-ksm-s1` `lc-baseline-ksm-s2` `lc-baseline-kcvla-l10` `lc-baseline-octo-l10-w2-50k` `lc-baseline-kcvla-l10-50k`: ablation suite across Octo + the 3 long-context adaptations (full runs)
     Changes: N/A (as above)
     Expected: not great given the smaller model but not terrible either, should be better than just the baseline itself though (directional correctness lol)
