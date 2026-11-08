@@ -12,3 +12,9 @@ Failed arms: branch, code changes, why it failed. -->
     Changes: everything was built a la CS2243
     Expected: works
     Results: 
+- 2026-11-08 15:58 `lc-baseline`: short baselines to reproduce, where possible, paper results on the LIBERO long context split. We should use the VLA-Cache, KeyframeChaining-VLA, and LAC as baselines and attempt to reproduce their numbers with smaller models with less than 100M parameters.
+    Changes: add training loops and model load/configs for the 3 described baselines; add custom retrieval task environments built on top of the Isaac Gym environment similarly to LIBERO
+    Expected: performance matches the papers dictated on long-context LIBERO benchmark split (or equivalent relevant benchmarks where necessary like WebShop or custom task retrieval benchmarks); likely pretty low
+- 2026-11-08 17:04 `lc-smoke`: smoke to test the above infrastructure for Octo + 3 long-context adaptations
+    Changes: N/A
+    Expected: works
