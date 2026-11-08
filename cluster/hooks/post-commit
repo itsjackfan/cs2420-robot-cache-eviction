@@ -6,6 +6,7 @@ dst=cs2420-robot-cache-eviction/$b
 printf '%s %s\n' "$b" "$(git rev-parse HEAD)" > .gitinfo
 # leading / anchors to repo root: a bare `data` would also drop configs/data/
 # /.claude: worktrees (with their own .venvs) live there in the main checkout
-rsync -az --delete --exclude /.git --exclude /.venv --exclude /.claude --exclude /outputs --exclude /data --exclude __pycache__ \
+# P /.env: worktrees have no local .env; never delete the cluster copy (still updated where a local one exists)
+rsync -az --delete --filter='P /.env' --exclude /.git --exclude /.venv --exclude /.claude --exclude /outputs --exclude /data --exclude __pycache__ \
   --exclude .pytest_cache -e "ssh -o BatchMode=yes" --rsync-path="mkdir -p $dst && rsync" ./ "fasrc:$dst/" \
   || echo "post-commit: sync failed; run 'ssh fasrc' once, then 'cluster/hooks/post-commit'"
