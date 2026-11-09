@@ -1,0 +1,9 @@
+# @package _global_
+# KC-VLA with oracle keyframes (gripper releases of the executed actions; the training-label rule): selector upper bound.
+defaults:
+  - kc_vla
+  - _self_
+
+policy:
+  _target_: src.policies.kc_vla.KCVLAOraclePolicy.from_pretrained
+  selector_ckpt: null

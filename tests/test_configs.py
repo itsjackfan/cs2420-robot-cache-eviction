@@ -44,6 +44,11 @@ def test_keyframe_selector_stages(stage, task):
     assert isinstance(instantiate(compose(GATES + over).policy), KeyframeSelector)
 
 
+def test_kc_vla_oracle_needs_no_selector():
+    cfg = resolved(["policy=kc_vla_oracle", "train=octo", "+init_from=/x/latest.pt"])
+    assert cfg["policy"]["_target_"].endswith("KCVLAOraclePolicy.from_pretrained") and cfg["policy"]["selector_ckpt"] is None
+
+
 def test_kc_vla():
     cfg = resolved(["policy=kc_vla", "train=octo", "policy.selector_ckpt=/x/latest.pt"])
     n = cfg["policy"]["n_keyframes"]
