@@ -12,6 +12,7 @@ Raw numbers behind the excluded LAC / KC-VLA rows. Interpretation goes in EXPERI
 
 | lac-recover p_recover 0.25 (eval only) | 8.8 | 20.0 | 9.1 | 187 | patch reuse 52.0% |
 | lac-maxage 1 (eval only; no patch reused 2 steps in a row) | 26.0 | 20.0 | 10.1 | 163 | patch reuse 45.5% |
+| lac-maxage 2 (eval only; no patch reused 3 steps in a row) | 18.6 | 25.0 | 8.9 | 164 | patch reuse 53.3% |
 | kcvla-nokf (eval only; selector never commits) | 0.8 | 0.0 | 92.2 | 415 | 0 keyframes |
 | kcvla-oracle (eval only; commit on executed gripper release) | 1.0 | 0.0 | 92.2 | 467 | 3.25 committed keyframes per step |
 
