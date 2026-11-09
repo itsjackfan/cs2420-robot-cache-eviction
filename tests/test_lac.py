@@ -43,6 +43,18 @@ def test_stage_losses_reach_selector(stage):
         assert policy.selector.ratio[-1].weight.grad.abs().sum() > 0 and 0 <= out["ratio"] <= 1
 
 
+def test_max_age_forces_refresh_after_consecutive_reuse():
+    policy = LACPolicy(ratios=[0.9], p_recover=0.0, max_age=1).eval()
+    policy.set_action_stats(torch.zeros(7), torch.ones(7))
+    policy.reset()
+    for _ in range(3):
+        policy.predict_action(batch(B=1, O=1))
+    r = policy.stats["reuse_ratio"]
+    assert r[0] == 0 and r[1] == pytest.approx(0.9, abs=0.01)  # step 2: 90% reused
+    assert r[2] == pytest.approx(0.1, abs=0.01)  # step 3: the 90% reused last step must recompute; only 10% are eligible
+    assert (policy.prev["age"] <= 1).all()
+
+
 def test_predict_reuses_lowest_scores_after_first_step():
     policy = LACPolicy(ratios=[0.5], p_recover=0.0).eval()
     policy.set_action_stats(torch.zeros(7), torch.ones(7))

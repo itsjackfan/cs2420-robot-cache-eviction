@@ -95,6 +95,17 @@ class KCVLAPolicy(OctoPolicy):
         if self.memory is None:
             self.memory = dict(first=cur, keyframes=[], frames=[], phase=1, cand=None, gap=0)
         m = self.memory
+        self.detect(m, cur, obs)
+        slots = ([m["first"]] + m["keyframes"])[-self.K:]
+        slots = [m["first"]] * (self.K - len(slots)) + slots + [cur]
+        window_obs = {k: torch.stack([s[k] for s in slots], 1) for k in ("state", "image")}
+        self.stats["n_keyframes"].append(len(m["keyframes"]))
+        self.stats["keyframe_mb"].append(len(slots[:-1]) * cur["image"].numel() / 2**20)
+        m["chunk"] = self.sample(self.embed({**window_obs, "lang": obs["lang"]})[:, -1])
+        return m["chunk"]
+
+    def detect(self, m, cur, obs):
+        """KSM greedy smoothing: commit the last above-threshold frame once p stays below threshold > commit_gap steps."""
         m["frames"].append(cur["image"][:, 0])
         win = m["frames"][-self.window:]
         win = [win[0]] * (self.window - len(win)) + win
@@ -107,9 +118,17 @@ class KCVLAPolicy(OctoPolicy):
             if m["gap"] > self.commit_gap:
                 m["keyframes"].append(m["cand"])
                 m["phase"], m["cand"] = m["phase"] + 1, None
-        slots = ([m["first"]] + m["keyframes"])[-self.K:]
-        slots = [m["first"]] * (self.K - len(slots)) + slots + [cur]
-        window_obs = {k: torch.stack([s[k] for s in slots], 1) for k in ("state", "image")}
-        self.stats["n_keyframes"].append(len(m["keyframes"]))
-        self.stats["keyframe_mb"].append(len(slots[:-1]) * cur["image"].numel() / 2**20)
-        return self.sample(self.embed({**window_obs, "lang": obs["lang"]})[:, -1])
+
+
+class KCVLAOraclePolicy(KCVLAPolicy):
+    """Oracle keyframes (upper bound on the selector): commit the current frame whenever the previously returned chunk
+    released the gripper (close -> open; the training-label rule). The whole chunk is executed (P = n_action_steps)."""
+
+    def detect(self, m, cur, obs):
+        if "chunk" not in m:
+            m["last_grip"] = -1.0
+            return
+        grip = [m["last_grip"]] + m["chunk"][0, :, 6].tolist()
+        if any(a > 0 > b for a, b in zip(grip, grip[1:])):
+            m["keyframes"].append(cur)
+        m["last_grip"] = grip[-1]

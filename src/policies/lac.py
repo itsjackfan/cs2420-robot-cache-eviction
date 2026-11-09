@@ -62,9 +62,10 @@ class Selector(nn.Module):
 class LACPolicy(OctoPolicy):
     def __init__(self, size: str = "small", action_horizon: int = 4, stage: int = 2,
                  ratios: tuple = (0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9), tau: float = 1.0,
-                 tau_s: float = 0.1, lam: float = 0.1, p_recover: float = 0.1):
+                 tau_s: float = 0.1, lam: float = 0.1, p_recover: float = 0.1, max_age: int = 0):
         super().__init__(size, action_horizon, augment=False)
         self.stage, self.tau, self.tau_s, self.lam, self.p_recover = stage, tau, tau_s, lam, p_recover
+        self.max_age = max_age  # > 0: a patch reused this many steps in a row must recompute (1 = training regime)
         self.requires_grad_(False)
         self.selector = Selector(len(ratios))
         self.register_buffer("ratios_R", torch.tensor(ratios, dtype=torch.float32))
@@ -123,14 +124,20 @@ class LACPolicy(OctoPolicy):
         x_BND, allow_NN = self.tokenize(self.views({**obs, "image": image}), encode_language(obs["lang"], image.device))
         L, N = len(self.transformer.layers), x_BND.shape[1]
         patch_M, _ = self.patch_index(x_BND.device)
-        reuse = None
+        reuse, age_M = None, torch.zeros(len(patch_M), dtype=torch.long, device=x_BND.device)
         if self.prev is not None and torch.rand(()) >= self.p_recover:
             scores_BM, logits_BR = self.select(self.prev["native"], cur)
             k = int(round(self.ratios_R[logits_BR[0].argmax()].item() * len(patch_M)))
+            score_M = scores_BM[0]
+            if self.max_age:
+                eligible_M = self.prev["age"] < self.max_age
+                score_M, k = score_M.masked_fill(~eligible_M, float("inf")), min(k, int(eligible_M.sum()))
+            cached = score_M.argsort()[:k]
+            age_M[cached] = self.prev["age"][cached] + 1
             reuse = torch.zeros(L, N, dtype=torch.bool, device=x_BND.device)
-            reuse[:, patch_M[scores_BM[0].argsort()[:k]]] = True
+            reuse[:, patch_M[cached]] = True
         out_BND, cache, _, n_fresh = self.run_layers(x_BND, allow_NN, reuse, self.prev and self.prev["cache"])
-        self.prev = dict(native=cur, cache=cache)
+        self.prev = dict(native=cur, cache=cache, age=age_M)
         self.log_flops(n_fresh, N)
         self.stats["reuse_ratio"].append(0.0 if reuse is None else reuse[:, patch_M].float().mean().item())
         self.stats["cache_mb"].append(sum(t.numel() * t.element_size() for c in cache for t in c.values()) / 2**20)

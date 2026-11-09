@@ -8,7 +8,7 @@ import pytest
 import torch
 
 from src.data import KeyframeTriplets, KeyframeWindows, LiberoKeyframeTask, LiberoTask, keyframes
-from src.policies.kc_vla import KCVLAPolicy, KeyframeSelector
+from src.policies.kc_vla import KCVLAOraclePolicy, KCVLAPolicy, KeyframeSelector
 
 N = 40
 
@@ -85,6 +85,20 @@ def test_selector_stage1_triplet_and_stage2_frozen_encoder():
     out["loss"].backward()
     assert s2.encoder.conv1.weight.grad is None and not s2.encoder.training
     assert s2.head[-1].weight.grad.abs().sum() > 0 and {"loss", "acc"} <= out.keys()
+
+
+def test_oracle_commits_on_executed_gripper_release(monkeypatch):
+    policy = KCVLAOraclePolicy(n_keyframes=2).eval()
+    policy.set_action_stats(torch.zeros(7), torch.ones(7))
+    grips = iter([[-1, 1, 1, 1], [1, 1, -1, -1], [-1, -1, -1, -1], [1, -1, -1, -1]])  # closes, releases (step 1), ..., releases (step 3)
+    monkeypatch.setattr(policy, "sample", lambda emb: torch.cat([torch.zeros(1, 4, 6), torch.tensor(next(grips), dtype=torch.float)[None, :, None]], -1))
+    policy.reset()
+    for t in range(4):
+        image = torch.full((1, 1, 2, 128, 128, 3), t, dtype=torch.uint8)
+        policy.predict_action({"state": torch.zeros(1, 1, 8), "image": image, "lang": ["x"]})
+    # releases inside the chunks returned at steps 1 and 3 -> keyframes = the frames seen at steps 2 and 4 (none yet for 4)
+    assert [int(k["image"][0, 0, 0, 0, 0]) for k in policy.memory["keyframes"]] == [2]
+    assert policy.memory["last_grip"] == -1
 
 
 def test_kc_vla_commits_keyframes_and_feeds_window(monkeypatch):
