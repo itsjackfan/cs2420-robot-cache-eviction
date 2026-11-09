@@ -23,3 +23,4 @@ Failed arms: branch, code changes, why it failed. -->
     Expected: not great given the smaller model but not terrible either, should be better than just the baseline itself though (directional correctness lol)
     Results: slightly beter than the paper with fine-tuning on the LIBERO-Long set; KCVLA/KSM and LAC completely mess up
 - 2026-11-09 09:23 `lc-baseline-lac-recover` `lc-baseline-lac-maxage` `lc-baseline-kcvla-cal` `lc-baseline-kcvla-nokf` `lc-baseline-kcvla-oracle`: fixes on the full ablation suite based on buggy results
+- 2026-11-09 14:51 `kcvla-simoracle` `kcvla-posinit` `kcvla-posinit-simoracle` `lc-baseline-lac-lam`: fixes to KFC and LAC to rerun them
