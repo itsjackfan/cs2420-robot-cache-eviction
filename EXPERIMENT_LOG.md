@@ -21,3 +21,5 @@ Failed arms: branch, code changes, why it failed. -->
 - 2026-11-08 17:39 `lc-baseline-octo-l10` `lc-baseline-octo-l10-w2` `lc-baseline-vlacache-l10` `lc-baseline-lac-s1` `lc-baseline-lac-s2` `lc-baseline-ksm-s1` `lc-baseline-ksm-s2` `lc-baseline-kcvla-l10` `lc-baseline-octo-l10-w2-50k` `lc-baseline-kcvla-l10-50k`: ablation suite across Octo + the 3 long-context adaptations (full runs)
     Changes: N/A (as above)
     Expected: not great given the smaller model but not terrible either, should be better than just the baseline itself though (directional correctness lol)
+    Results: slightly beter than the paper with fine-tuning on the LIBERO-Long set; KCVLA/KSM and LAC completely mess up
+- 2026-11-09 09:23 `lc-baseline-lac-recover` `lc-baseline-lac-maxage` `lc-baseline-kcvla-cal` `lc-baseline-kcvla-nokf` `lc-baseline-kcvla-oracle`: fixes on the full ablation suite based on buggy results
