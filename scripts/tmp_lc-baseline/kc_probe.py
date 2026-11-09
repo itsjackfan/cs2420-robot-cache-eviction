@@ -14,7 +14,7 @@ from src.policies.octo import OctoPolicy
 
 kc_ckpt, octo_ckpt, root = sys.argv[1], sys.argv[2], Path(sys.argv[3])
 n_tasks = int(sys.argv[4]) if len(sys.argv) > 4 else 3
-load = lambda p, path: p.load_state_dict(torch.load(path, map_location="cpu", weights_only=False)["policy"], strict=False) or p.eval()
+load = lambda p, path: (p.load_state_dict(torch.load(path, map_location="cpu", weights_only=False)["policy"], strict=False), p.eval())[1]
 kc, octo = load(KCVLAPolicy(n_keyframes=3), kc_ckpt), load(OctoPolicy(), octo_ckpt)
 STRIDE = 4
 
