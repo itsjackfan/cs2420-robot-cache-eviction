@@ -7,6 +7,11 @@ Raw numbers behind the excluded LAC / KC-VLA rows. Interpretation goes in EXPERI
 |---|---|---|---|---|---|
 | lac-s2 | 0.6 | 0.0 | 7.5 | 161 | learned cache ratio 0.72; patch reuse 62.4% |
 | kcvla-l10 (9,373 steps) | 0.0 | 0.0 | 92.2 | 379 | test loss 0.879 (octo-l10: 1.144); 1.08 committed keyframes per step |
+| lac-recover p_recover 0.5 (eval only, lac-s2 weights) | 26.0 | 15.0 | 11.9 | 240 | patch reuse 34.7% |
+| kcvla-cal threshold 0.8 (eval only, kcvla-l10 weights) | 0.2 | 0.0 | 92.2 | 411 | 0.79 committed keyframes per step |
+
+GFLOPs count the Octo transformer only; LAC's selector CNN + RAFT-small and KC-VLA's ResNet-18 selector are excluded
+(control Hz includes them).
 
 ## LAC, open loop on held-out demos (`scripts/tmp_lc-baseline/lac_probe.py`)
 Action MSE on pose dims and gripper-sign agreement vs the demo, inference every 4 steps, 70% patch reuse in both LAC modes.
