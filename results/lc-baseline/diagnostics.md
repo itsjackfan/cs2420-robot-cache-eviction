@@ -10,6 +10,21 @@ Raw numbers behind the excluded LAC / KC-VLA rows. Interpretation goes in EXPERI
 | lac-recover p_recover 0.5 (eval only, lac-s2 weights) | 26.0 | 15.0 | 11.9 | 240 | patch reuse 34.7% |
 | kcvla-cal threshold 0.8 (eval only, kcvla-l10 weights) | 0.2 | 0.0 | 92.2 | 411 | 0.79 committed keyframes per step |
 
+| lac-recover p_recover 0.25 (eval only) | 8.8 | 20.0 | 9.1 | 187 | patch reuse 52.0% |
+| lac-maxage 1 (eval only; no patch reused 2 steps in a row) | 26.0 | 20.0 | 10.1 | 163 | patch reuse 45.5% |
+| kcvla-nokf (eval only; selector never commits) | 0.8 | 0.0 | 92.2 | 415 | 0 keyframes |
+| kcvla-oracle (eval only; commit on executed gripper release) | 1.0 | 0.0 | 92.2 | 467 | 3.25 committed keyframes per step |
+
+## KC-VLA policy, open loop on held-out demos (`scripts/tmp_lc-baseline/kc_probe.py`)
+Inputs built exactly as in training (gripper-release keyframe slots + current frame); first predicted action vs demo,
+inference every 4 steps. Pose MSE / gripper-sign agreement.
+
+| task | octo-l10 (window 1) | kcvla-l10-50k ckpt (step 17,496) |
+|---|---|---|
+| KITCHEN_SCENE3 stove + moka | 0.0159 / 0.96 | 0.0400 / 0.99 |
+| KITCHEN_SCENE4 black bowl | 0.0183 / 0.98 | 0.0478 / 0.98 |
+| KITCHEN_SCENE6 yellow/white mug | 0.0232 / 0.97 | 0.0732 / 1.00 |
+
 GFLOPs count the Octo transformer only; LAC's selector CNN + RAFT-small and KC-VLA's ResNet-18 selector are excluded
 (control Hz includes them).
 

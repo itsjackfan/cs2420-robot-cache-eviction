@@ -85,11 +85,12 @@ for label, r, c in ROWS:
     ax.scatter(stat(r, "gflops"), 100 * stat(r, "libero_10/mean_score"), s=60, color=c, edgecolor="white",
                linewidth=2, zorder=3)
 # points within ~3 pp at the same compute share one label: {run key: (group label, offset, ha)}
+KC_ALL = ("KC-VLA: selector τ 0.5 / 0.8,\nno keyframes, oracle keyframes", (-8, 12), "right")
 GROUPS = {"vlacache": ("VLA-Cache α=0.5 / 1 / 2", (8, -4), "left"),
-          "kcvla-l10": ("KC-VLA selector τ 0.5 / 0.8", (-8, 6), "right"),
-          "kcvla-cal": ("KC-VLA selector τ 0.5 / 0.8", (-8, 6), "right")}
+          "kcvla-l10": KC_ALL, "kcvla-cal": KC_ALL, "kcvla-nokf": KC_ALL, "kcvla-oracle": KC_ALL}
 OFFSETS = {P + "octo-l10": ((0, 9), "center"), P + "octo-l10-w2": ((6, 9), "left"),
-           P + "octo-l10-w2-50k": ((6, -9), "left")}
+           P + "octo-l10-w2-50k": ((6, -9), "left"),
+           P + "lac-maxage_+policy.max_age=1": ((-8, 0), "right"), P + "lac-maxage_+policy.max_age=2": ((0, -11), "center")}
 done = set()
 for label, r, c in ROWS:
     g, p = stat(r, "gflops"), 100 * stat(r, "libero_10/mean_score")
