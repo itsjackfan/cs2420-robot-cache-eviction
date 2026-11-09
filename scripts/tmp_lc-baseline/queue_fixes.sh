@@ -19,7 +19,8 @@ for n in $P-octo-l10-w2-50k $P-kcvla-simoracle $P-kcvla-posinit $P-kcvla-posinit
 done
 [ -f "$H/$P-octo-l10-w2-50k/latest.pt" ] || { echo "missing holylabs copy of w2-50k checkpoint"; exit 1; }
 
-E="data=libero_10 eval=libero_10 eval.n_test=50"
+# data.root = the cached suites: skips snapshot_download, which writes lock files into the (full) netscratch data dir
+E="data=libero_10 eval=libero_10 eval.n_test=50 data.root=$RCE_DATA_DIR/LIBERO"
 launch() {  # <name> "<overrides>" [after job id] -> sets LAST to the (last) job id
   local out
   out=$(uv run --no-sync --frozen python cluster/launch.py "$@")
@@ -28,6 +29,7 @@ launch() {  # <name> "<overrides>" [after job id] -> sets LAST to the (last) job
 }
 
 n=$P-octo-l10-w2-50k
+sed -i "s#^  root: null#  root: $RCE_DATA_DIR/LIBERO#" $H/$n/config.yaml
 echo "$n $(sbatch --parsable --job-name=$n --output=$H/$n/slurm-%j.out --partition=kempner_rtx --account=kempner_ydu_lab \
   --exclude=holygpu7c1934 cluster/run.sbatch $H/$n/config.yaml)"
 

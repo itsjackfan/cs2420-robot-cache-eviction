@@ -13,6 +13,7 @@ cd "$SLURM_SUBMIT_DIR"
 set -a; source .env; set +a
 export MUJOCO_GL=egl PYOPENGL_PLATFORM=egl PYTHONPATH="$PWD:$LIBERO_ROOT"
 export HF_HUB_CACHE="${HF_HUB_CACHE:-/n/netscratch/ydu_lab/Lab/$USER/hf/hub}"  # octo + t5-base weights
+export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"  # cached weights only: online loads write lock files into the cache dir
 export TORCH_HOME="${TORCH_HOME:-/n/holylabs/ydu_lab/Lab/$USER/torch}"            # torchvision weights (RAFT, ResNet)
 # one shared project venv for every worktree; never synced by jobs (freeze.txt records what actually ran)
 export UV_PROJECT_ENVIRONMENT="${UV_PROJECT_ENVIRONMENT:-$HOME/venvs/cs2420-rce}"
