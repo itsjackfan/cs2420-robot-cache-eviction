@@ -10,6 +10,7 @@
 | LAC max_age 1 | 26.0 ± 2.0 | 20 | 10.1 | 163 | 45.5 |  |
 | LAC max_age 2 | 18.6 ± 1.7 | 25 | 8.9 | 164 | 53.3 |  |
 | Octo-Small FT (window 2, FLOP-matched) | 56.0 ± 2.2 | 40 | 38.1 | 513 |  |  |
+| Octo-Small FT (window 2, 50k) | 63.8 ± 2.1 | 70 | 38.1 | 518 |  |  |
 | KC-VLA (selector τ 0.5) | 0.0 ± 0.0 | 0 | 92.2 | 379 |  | 1.08 |
 | KC-VLA (selector τ 0.8) | 0.2 ± 0.2 | 0 | 92.2 | 411 |  | 0.79 |
 | KC-VLA (no keyframes) | 0.8 ± 0.4 | 0 | 92.2 | 415 |  | 0.00 |

@@ -88,8 +88,8 @@ for label, r, c in ROWS:
 KC_ALL = ("KC-VLA: selector τ 0.5 / 0.8,\nno keyframes, oracle keyframes", (-8, 12), "right")
 GROUPS = {"vlacache": ("VLA-Cache α=0.5 / 1 / 2", (8, -4), "left"),
           "kcvla-l10": KC_ALL, "kcvla-cal": KC_ALL, "kcvla-nokf": KC_ALL, "kcvla-oracle": KC_ALL}
-OFFSETS = {P + "octo-l10": ((0, 9), "center"), P + "octo-l10-w2": ((6, 9), "left"),
-           P + "octo-l10-w2-50k": ((6, -9), "left"),
+OFFSETS = {P + "octo-l10": ((0, 9), "center"), P + "octo-l10-w2": ((6, -10), "left"),
+           P + "octo-l10-w2-50k": ((6, 9), "left"),
            P + "lac-maxage_+policy.max_age=1": ((-8, 0), "right"), P + "lac-maxage_+policy.max_age=2": ((0, -11), "center")}
 done = set()
 for label, r, c in ROWS:
@@ -106,7 +106,7 @@ for label, r, c in ROWS:
 ax.set_xscale("log")
 ax.set_xticks([5, 10, 20, 50, 100], ["5", "10", "20", "50", "100"])
 ax.set_xlim(5, 130)
-ax.set_ylim(-3, 62)
+ax.set_ylim(-3, 70)
 ax.set_xlabel("transformer GFLOPs per inference call (log scale)")
 ax.set_ylabel("LIBERO-Long success (%)")
 ax.grid(True, color=GRID, linewidth=1)
