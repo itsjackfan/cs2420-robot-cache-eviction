@@ -8,7 +8,7 @@ import h5py
 import numpy as np
 import torch
 
-from src.data import LiberoKeyframeTask
+from src.data import LiberoKeyframeTask, LiberoTask
 from src.policies.kc_vla import KCVLAPolicy
 from src.policies.octo import OctoPolicy
 
@@ -30,12 +30,10 @@ for path in sorted(root.glob("*.hdf5"))[:n_tasks]:
     with h5py.File(path) as f:
         demo = sorted(f["data"], key=lambda d: int(d.split("_")[1]))[-1]
     ds = LiberoKeyframeTask(path, [demo], obs_horizon=4, action_horizon=4, n_keyframes=3)
-    w1 = LiberoKeyframeTask(path, [demo], obs_horizon=1, action_horizon=4, n_keyframes=0)
-    first_only = lambda d, t: np.array([0, 0, 0, t])
+    w1 = LiberoTask(path, [demo], obs_horizon=1, action_horizon=4)
     idx = range(0, len(ds), STRIDE)
     gt = np.stack([ds[i]["action"][0] for i in idx])
-    for name, policy, data, override in [("octo-l10 / window 1", octo, w1, None), ("kc / training window", kc, ds, None),
-                                         ("kc / first-frame slots", kc, ds, first_only)]:
+    for name, policy, data, override in [("octo-l10 / window 1", octo, w1, None), ("kc / training window", kc, ds, None)]:
         if override:
             data.obs_index = override
         a = np.stack([first_action(policy, data[i]) for i in idx])
