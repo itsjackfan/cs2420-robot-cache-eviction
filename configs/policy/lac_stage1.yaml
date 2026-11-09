@@ -10,6 +10,7 @@ policy:
   tau_s: 0.1      # soft top-k temperature (unspecified)
   lam: 0.1        # weight of -E[r] (unspecified)
   p_recover: 0.1  # per-step full-recompute probability at inference (unspecified)
+  max_age: 0      # > 0: a patch reused this many steps in a row must recompute at inference (1 = training regime)
 init_from: ???    # finished policy=octo_small run: <out>/<branch>/<ablation>/latest.pt
 data:
   obs_horizon: 2  # (frame t - stride, frame t)

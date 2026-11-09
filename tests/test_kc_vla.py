@@ -87,18 +87,27 @@ def test_selector_stage1_triplet_and_stage2_frozen_encoder():
     assert s2.head[-1].weight.grad.abs().sum() > 0 and {"loss", "acc"} <= out.keys()
 
 
-def test_oracle_commits_on_executed_gripper_release(monkeypatch):
+def test_oracle_commits_when_a_goal_predicate_becomes_true():
     policy = KCVLAOraclePolicy(n_keyframes=2).eval()
     policy.set_action_stats(torch.zeros(7), torch.ones(7))
-    grips = iter([[-1, 1, 1, 1], [1, 1, -1, -1], [-1, -1, -1, -1], [1, -1, -1, -1]])  # closes, releases (step 1), ..., releases (step 3)
-    monkeypatch.setattr(policy, "sample", lambda emb: torch.cat([torch.zeros(1, 4, 6), torch.tensor(next(grips), dtype=torch.float)[None, :, None]], -1))
+    assert policy.uses_goal_progress
     policy.reset()
-    for t in range(4):
+    for t, done in enumerate([0, 0, 1, 1, 2]):
         image = torch.full((1, 1, 2, 128, 128, 3), t, dtype=torch.uint8)
-        policy.predict_action({"state": torch.zeros(1, 1, 8), "image": image, "lang": ["x"]})
-    # releases inside the chunks returned at steps 1 and 3 -> keyframes = the frames seen at steps 2 and 4 (none yet for 4)
-    assert [int(k["image"][0, 0, 0, 0, 0]) for k in policy.memory["keyframes"]] == [2]
-    assert policy.memory["last_grip"] == -1
+        policy.predict_action({"state": torch.zeros(1, 1, 8), "image": image, "lang": ["x"], "goals_done": done})
+    assert [int(k["image"][0, 0, 0, 0, 0]) for k in policy.memory["keyframes"]] == [2, 4]
+
+
+def test_init_timesteps_copies_trained_slot_into_untrained(tmp_path):
+    from src.policies.octo import OctoPolicy
+    src = OctoPolicy()
+    src.save_pretrained(tmp_path)
+    plain = KCVLAPolicy.from_pretrained(tmp_path, n_keyframes=2)
+    fixed = KCVLAPolicy.from_pretrained(tmp_path, n_keyframes=2, init_timesteps=True)
+    for k in ("obs_primary", "obs_wrist", "readout_action"):
+        assert torch.equal(plain.pos[k], src.pos[k])
+        assert torch.equal(fixed.pos[k][:, :2], src.pos[k][:, :2])
+        assert torch.equal(fixed.pos[k][:, 2:], src.pos[k][:, 1:2].expand_as(fixed.pos[k][:, 2:]))
 
 
 def test_kc_vla_commits_keyframes_and_feeds_window(monkeypatch):

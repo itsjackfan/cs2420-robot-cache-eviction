@@ -1,0 +1,8 @@
+# @package _global_
+# KC-VLA with Octo's untrained timestep embeddings 2..9 initialized from the trained index 1 (one change vs kc_vla).
+defaults:
+  - kc_vla
+  - _self_
+
+policy:
+  init_timesteps: true

@@ -44,6 +44,13 @@ def test_keyframe_selector_stages(stage, task):
     assert isinstance(instantiate(compose(GATES + over).policy), KeyframeSelector)
 
 
+def test_lac_max_age_and_kc_posinit_are_plain_overrides():
+    cfg = resolved(["policy=lac_stage2", "init_from=/x/latest.pt", "policy.max_age=1", "policy.lam=0.01"])
+    assert cfg["policy"]["max_age"] == 1 and cfg["policy"]["lam"] == 0.01
+    cfg = resolved(["policy=kc_vla_posinit", "train=octo", "policy.selector_ckpt=/x/latest.pt"])
+    assert cfg["policy"]["init_timesteps"] is True and cfg["data"]["obs_horizon"] == 4
+
+
 def test_kc_vla_oracle_needs_no_selector():
     cfg = resolved(["policy=kc_vla_oracle", "train=octo", "+init_from=/x/latest.pt"])
     assert cfg["policy"]["_target_"].endswith("KCVLAOraclePolicy.from_pretrained") and cfg["policy"]["selector_ckpt"] is None

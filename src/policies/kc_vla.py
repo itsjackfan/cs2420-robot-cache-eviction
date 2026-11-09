@@ -71,14 +71,26 @@ class KeyframeSelector(Policy):
 
 class KCVLAPolicy(OctoPolicy):
     def __init__(self, size: str = "small", action_horizon: int = 4, n_keyframes: int = 3, selector_ckpt: str = None,
-                 threshold: float = 0.5, commit_gap: int = 2, window: int = 3):
+                 threshold: float = 0.5, commit_gap: int = 2, window: int = 3, init_timesteps: bool = False):
         super().__init__(size, action_horizon)
         self.K, self.threshold, self.commit_gap, self.window = n_keyframes, threshold, commit_gap, window
+        self.init_timesteps = init_timesteps  # see _from_pretrained
         self.selector = KeyframeSelector(stage=2, pretrained=False)
         if selector_ckpt:
             self.selector.load_state_dict(checkpoint.load(selector_ckpt)["policy"])
         self.selector.requires_grad_(False)
         self.memory = None
+
+    @classmethod
+    def _from_pretrained(cls, **kwargs):
+        """Octo-Small 1.5 was pretrained with window 2: timestep embeddings 2..9 are untrained. With init_timesteps,
+        copy the trained most-recent-frame embedding (index 1) into them after loading."""
+        model = super()._from_pretrained(**kwargs)
+        if model.init_timesteps:
+            with torch.no_grad():
+                for k in ("obs_primary", "obs_wrist", "readout_action"):
+                    model.pos[k][:, 2:] = model.pos[k][:, 1:2]
+        return model
 
     def train(self, mode=True):
         super().train(mode)
@@ -121,14 +133,11 @@ class KCVLAPolicy(OctoPolicy):
 
 
 class KCVLAOraclePolicy(KCVLAPolicy):
-    """Oracle keyframes (upper bound on the selector): commit the current frame whenever the previously returned chunk
-    released the gripper (close -> open; the training-label rule). The whole chunk is executed (P = n_action_steps)."""
+    """Oracle keyframes (upper bound on the selector): commit the current frame whenever another BDDL goal predicate
+    becomes true (true phase completion from sim state; rollout passes obs["goals_done"])."""
+    uses_goal_progress = True
 
     def detect(self, m, cur, obs):
-        if "chunk" not in m:
-            m["last_grip"] = -1.0
-            return
-        grip = [m["last_grip"]] + m["chunk"][0, :, 6].tolist()
-        if any(a > 0 > b for a, b in zip(grip, grip[1:])):
+        if obs["goals_done"] > m.get("goals_done", 0):
             m["keyframes"].append(cur)
-        m["last_grip"] = grip[-1]
+        m["goals_done"] = obs["goals_done"]

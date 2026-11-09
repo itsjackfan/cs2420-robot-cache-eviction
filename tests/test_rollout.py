@@ -20,6 +20,28 @@ def test_obs_from_sim():
     assert image_VHWC.shape == (2, 8, 8, 3) and (image_VHWC[1] == 1).all()
 
 
+def test_goal_progress_only_for_policies_that_ask(cfg, libero_root, fake_tasks):
+    seen = {}
+
+    class Plain(NoOpPolicy):
+        def predict_action(self, obs):
+            seen.setdefault("plain", []).append("goals_done" in obs)
+            return super().predict_action(obs)
+
+    class Wants(Plain):
+        uses_goal_progress = True
+
+        def predict_action(self, obs):
+            seen.setdefault("wants", []).append(obs["goals_done"])
+            return NoOpPolicy.predict_action(self, obs)
+
+    evaluate(Plain(action_horizon=4), cfg, libero_root)
+    evaluate(Wants(action_horizon=4), cfg, libero_root)
+    assert not any(seen["plain"])
+    # settle 1 step + chunks of 2 env steps: calls at t=1 (0 goals), t=3 (goal "a" done) per episode
+    assert seen["wants"][:2] == [0, 1] and set(seen["wants"]) == {0, 1}
+
+
 def test_evaluate_metrics(cfg, libero_root, fake_tasks):
     seen = []
 

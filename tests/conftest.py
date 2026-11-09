@@ -63,8 +63,15 @@ def cfg(tmp_path, libero_root):
 
 
 class FakeEnv:
+    """Mimics LIBERO's OffScreenRenderEnv; env.env.parsed_problem / _eval_predicate mimic the BDDL goal check
+    (goal "a" holds from env step 3 on; "b" never)."""
+
     def __init__(self, success_step=None):
         self.success_step, self.steps, self.init_states_X, self.closed = success_step, 0, [], False
+        self.env, self.parsed_problem = self, {"goal_state": [["a"], ["b"]]}
+
+    def _eval_predicate(self, state):
+        return state[0] == "a" and self.t >= 3
 
     def raw(self):
         return {"robot0_eef_pos": np.zeros(3), "robot0_eef_quat": np.array([0, 0, 0, 1.0]),  # quat xyzw

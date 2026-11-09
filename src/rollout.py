@@ -64,6 +64,12 @@ def obs_from_sim(raw):
             "image": np.stack([raw["agentview_image"], raw["robot0_eye_in_hand_image"]])}
 
 
+def goals_done(env):
+    """Number of the task's BDDL goal predicates (a conjunction) currently satisfied."""
+    problem = env.env
+    return sum(bool(problem._eval_predicate(s)) for s in problem.parsed_problem["goal_state"])
+
+
 def episode(env, policy, init_state_X, instruction, cfg, max_steps, record):
     env.reset()
     raw = env.set_init_state(init_state_X)
@@ -80,6 +86,8 @@ def episode(env, policy, init_state_X, instruction, cfg, max_steps, record):
         obs = {k: torch.from_numpy(np.stack([h[k] for h in history]))[None].to(policy.device)  # [1, O, ...]
                for k in ("state", "image")} # history / obs updated after each block of actions
                # NOTE: any past obs cache management / context management could be done here re: 2420 project
+        if getattr(policy, "uses_goal_progress", False):  # privileged sim state, for oracle ablations only
+            obs["goals_done"] = goals_done(env)
         start = time.perf_counter()
         with torch.no_grad():
             # predict block of actions with one FP
