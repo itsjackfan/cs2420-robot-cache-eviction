@@ -33,7 +33,7 @@ for root in map(Path, sys.argv[1:]):
         summ = r.summary._json_dict
         bad = [k for k, v in last.items() if not (isinstance(summ.get(k), (int, float)) and math.isclose(summ[k], v, rel_tol=1e-6, abs_tol=1e-9))]
         local_steps = {row["step"] for row in rows}
-        remote_steps = {h["_step"] for h in r.scan_history(keys=["_step"], page_size=10000)}
+        remote_steps = {h["_step"] for h in r.scan_history(page_size=10000)}  # keys=["_step"] alone returns no rows
         missing = local_steps - remote_steps
         videos = len(list((d / "videos").glob("*.mp4"))) if (d / "videos").exists() else 0
         rvideos = sum(1 for f in r.files() if f.name.startswith("media/videos/"))
