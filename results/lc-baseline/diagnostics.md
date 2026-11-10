@@ -15,6 +15,11 @@ Raw numbers behind the excluded LAC / KC-VLA rows. Interpretation goes in EXPERI
 | lac-maxage 2 (eval only; no patch reused 3 steps in a row) | 18.6 | 25.0 | 8.9 | 164 | patch reuse 53.3% |
 | kcvla-nokf (eval only; selector never commits) | 0.8 | 0.0 | 92.2 | 415 | 0 keyframes |
 | kcvla-oracle (eval only; commit on executed gripper release) | 1.0 | 0.0 | 92.2 | 467 | 3.25 committed keyframes per step |
+| kcvla-simoracle (eval only; commit when a BDDL goal predicate becomes true) | 1.6 | 0.0 | 92.2 | 476 | 0.23 committed keyframes per step |
+| kcvla-posinit (retrain 9,373 steps; timestep embeddings 2-9 copied from 1; selector τ 0.8) | 3.0 | 5.0 | 92.2 | 415 | 0.86 keyframes per step; test loss 0.879 |
+| kcvla-posinit-simoracle (eval only, kcvla-posinit weights) | 5.6 | 0.0 | 92.2 | 463 | 0.31 keyframes per step |
+| lac-lam λ 0.01 (stage 2 retrain from lac-s1; eval with max_age 1) | 27.6 | 20.0 | 10.3 | 152 | patch reuse 44.6%; learned test ratio 0.471; test task loss 1.195 |
+| lac-lam λ 0.03 | pending (gpu_requeue) | | | | |
 
 ## KC-VLA policy, open loop on held-out demos (`scripts/tmp_lc-baseline/kc_probe.py`)
 Inputs built exactly as in training (gripper-release keyframe slots + current frame); first predicted action vs demo,

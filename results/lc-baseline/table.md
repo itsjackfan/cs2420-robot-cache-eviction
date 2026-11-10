@@ -9,9 +9,13 @@
 | LAC p_recover 0.5 | 26.0 ± 2.0 | 15 | 11.9 | 240 | 34.7 |  |
 | LAC max_age 1 | 26.0 ± 2.0 | 20 | 10.1 | 163 | 45.5 |  |
 | LAC max_age 2 | 18.6 ± 1.7 | 25 | 8.9 | 164 | 53.3 |  |
+| LAC λ 0.01 retrain, max_age 1 | 27.6 ± 2.0 | 20 | 10.3 | 152 | 44.6 |  |
 | Octo-Small FT (window 2, FLOP-matched) | 56.0 ± 2.2 | 40 | 38.1 | 513 |  |  |
 | Octo-Small FT (window 2, 50k) | 63.8 ± 2.1 | 70 | 38.1 | 518 |  |  |
 | KC-VLA (selector τ 0.5) | 0.0 ± 0.0 | 0 | 92.2 | 379 |  | 1.08 |
 | KC-VLA (selector τ 0.8) | 0.2 ± 0.2 | 0 | 92.2 | 411 |  | 0.79 |
 | KC-VLA (no keyframes) | 0.8 ± 0.4 | 0 | 92.2 | 415 |  | 0.00 |
-| KC-VLA (oracle keyframes) | 1.0 ± 0.4 | 0 | 92.2 | 467 |  | 3.25 |
+| KC-VLA (gripper oracle) | 1.0 ± 0.4 | 0 | 92.2 | 467 |  | 3.25 |
+| KC-VLA (sim-state oracle) | 1.6 ± 0.6 | 0 | 92.2 | 476 |  | 0.23 |
+| KC-VLA timestep fix (selector τ 0.8) | 3.0 ± 0.8 | 5 | 92.2 | 415 |  | 0.86 |
+| KC-VLA timestep fix (sim-state oracle) | 5.6 ± 1.0 | 0 | 92.2 | 463 |  | 0.31 |

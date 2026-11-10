@@ -23,12 +23,17 @@ ROWS = [  # (label, run, role color)
     ("LAC p_recover 0.5", "lac-recover_policy.p_recover=0.5", CACHE),
     ("LAC max_age 1", "lac-maxage_+policy.max_age=1", CACHE),
     ("LAC max_age 2", "lac-maxage_+policy.max_age=2", CACHE),
+    ("LAC λ 0.01 retrain, max_age 1", "lac-lam_policy.lam=0.01", CACHE),
+    ("LAC λ 0.03 retrain, max_age 1", "lac-lam_policy.lam=0.03", CACHE),
     ("Octo-Small FT (window 2, FLOP-matched)", "octo-l10-w2", MEMORY),
     ("Octo-Small FT (window 2, 50k)", "octo-l10-w2-50k", MEMORY),
     ("KC-VLA (selector τ 0.5)", "kcvla-l10", MEMORY),
     ("KC-VLA (selector τ 0.8)", "kcvla-cal", MEMORY),
     ("KC-VLA (no keyframes)", "kcvla-nokf", MEMORY),
-    ("KC-VLA (oracle keyframes)", "kcvla-oracle", MEMORY),
+    ("KC-VLA (gripper oracle)", "kcvla-oracle", MEMORY),
+    ("KC-VLA (sim-state oracle)", "kcvla-simoracle", MEMORY),
+    ("KC-VLA timestep fix (selector τ 0.8)", "kcvla-posinit", MEMORY),
+    ("KC-VLA timestep fix (sim-state oracle)", "kcvla-posinit-simoracle", MEMORY),
 ]
 ROWS = [(l, P + r, c) for l, r, c in ROWS if "test/libero_10/mean_score" in runs.get(P + r, {})]
 LEGEND = [(BASE, "full-compute baseline"), (CACHE, "token caching"), (MEMORY, "history / memory")]
@@ -85,12 +90,12 @@ for label, r, c in ROWS:
     ax.scatter(stat(r, "gflops"), 100 * stat(r, "libero_10/mean_score"), s=60, color=c, edgecolor="white",
                linewidth=2, zorder=3)
 # points within ~3 pp at the same compute share one label: {run key: (group label, offset, ha)}
-KC_ALL = ("KC-VLA: selector τ 0.5 / 0.8,\nno keyframes, oracle keyframes", (-8, 12), "right")
-GROUPS = {"vlacache": ("VLA-Cache α=0.5 / 1 / 2", (8, -4), "left"),
-          "kcvla-l10": KC_ALL, "kcvla-cal": KC_ALL, "kcvla-nokf": KC_ALL, "kcvla-oracle": KC_ALL}
+KC_ALL = ("KC-VLA (7 variants, 0–5.6%)", (-8, 10), "right")
+GROUPS = {"vlacache": ("VLA-Cache α=0.5 / 1 / 2", (8, -4), "left"), "kcvla": KC_ALL}
 OFFSETS = {P + "octo-l10": ((0, 9), "center"), P + "octo-l10-w2": ((6, -10), "left"),
            P + "octo-l10-w2-50k": ((6, 9), "left"),
-           P + "lac-maxage_+policy.max_age=1": ((-8, 0), "right"), P + "lac-maxage_+policy.max_age=2": ((0, -11), "center")}
+           P + "lac-maxage_+policy.max_age=1": ((-8, -6), "right"), P + "lac-maxage_+policy.max_age=2": ((0, -11), "center"),
+           P + "lac-lam_policy.lam=0.01": ((0, 12), "center")}
 done = set()
 for label, r, c in ROWS:
     g, p = stat(r, "gflops"), 100 * stat(r, "libero_10/mean_score")
