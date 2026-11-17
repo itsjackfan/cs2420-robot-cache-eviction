@@ -23,9 +23,17 @@ dev = ["pytest"]
 # cluster only; LIBERO itself is cloned + put on PYTHONPATH by cluster/setup.sh
 sim = ["robosuite==1.4.1", "mujoco==3.1.6", "bddl==1.0.1", "gym==0.26.2", "easydict", "cloudpickle", "opencv-python-headless",
        "matplotlib", "numba", "scipy", "future"]
+# cluster only; RoboMME (ManiSkill3 / SAPIEN, needs Vulkan on the GPU node)
+robomme = ["robomme", "mani-skill"]
 
 [tool.uv]
 package = false
+# robomme pins torch==2.9.1 / torchvision==0.24.1; keep the project's torch
+override-dependencies = ["torch", "torchvision>=0.26"]
+
+[tool.uv.sources]
+robomme = { git = "https://github.com/RoboMME/robomme_benchmark.git", rev = "e9a0830011c0360b6c4afc9b51ac4857a9da5ad7" }
+mani-skill = { git = "https://github.com/YinpeiDai/ManiSkill.git", rev = "07be6fbc66350ddca200abfb0a11b692f078f7fd" }
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
