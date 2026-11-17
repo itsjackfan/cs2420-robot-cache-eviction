@@ -2,7 +2,7 @@
 import torch
 from hydra.utils import instantiate
 
-from src.policy import Policy
+from src.policies.baseline import Policy
 
 
 def obs(B=3):

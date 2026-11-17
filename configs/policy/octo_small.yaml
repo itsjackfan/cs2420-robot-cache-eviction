@@ -1,0 +1,12 @@
+# @package _global_
+# Octo-Small 1.5 (27M) from the official checkpoint (converted + parity-checked in CS2243-Project),
+# inputs per octo finetune_config.py: window 1, action chunk 4.
+policy:
+  _target_: src.policies.octo.OctoPolicy.from_pretrained
+  pretrained_model_name_or_path: jackfanml/octo-small-1.5-torch
+  action_horizon: ${data.action_horizon}
+data:
+  obs_horizon: 1
+  action_horizon: 4
+eval:
+  n_action_steps: 4

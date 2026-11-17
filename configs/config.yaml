@@ -1,13 +1,14 @@
 defaults:
-  - policy: noop
   - data: libero
   - eval: libero
-  - train: default
+  - train: baseline
+  - policy: noop    # last: policy yamls may override data/eval/train keys (@package _global_)
   - _self_
 
 name: ???      # set by launcher; must appear as `name` in EXPERIMENT_LOG.md
 run_dir: ???   # set by launcher: $RCE_OUT_ROOT/<branch>/<name>
 seed: 0
+# init_from (declared by policy yamls that need it): a run's latest.pt, loaded into the policy (strict=False)
 device: cuda
 git:
   branch: ???

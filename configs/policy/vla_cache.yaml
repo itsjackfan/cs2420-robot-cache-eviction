@@ -1,0 +1,19 @@
+# @package _global_
+# VLA-Cache on a fine-tuned Octo-Small (training-free; eval only). Paper LIBERO settings: tau 0.996, top-k 100,
+# tau_task 0.5; alpha_scale (k in Eq. 9) is unspecified in the paper -> sweep it.
+policy:
+  _target_: src.policies.vla_cache.VLACachePolicy
+  size: small
+  action_horizon: ${data.action_horizon}
+  tau: 0.996
+  top_k: 100
+  tau_task: 0.5
+  alpha_scale: 1.0
+init_from: ???    # finished policy=octo_small run: <out>/<branch>/<ablation>/latest.pt
+data:
+  obs_horizon: 1
+  action_horizon: 4
+eval:
+  n_action_steps: 4
+train:
+  epochs: 0

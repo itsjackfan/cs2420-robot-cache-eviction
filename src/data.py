@@ -4,10 +4,13 @@ S state (8 = eef pos 3 + axis-angle 3 + gripper 2), A action (7), K window lengt
 from pathlib import Path
 import json
 import math
+import os
+import shutil
 
 import h5py
 import numpy as np
 from huggingface_hub import snapshot_download
+from hydra.utils import instantiate
 from torch.utils.data import ConcatDataset, Dataset
 
 
@@ -19,46 +22,76 @@ def resolve_root(cfg):
                                   allow_patterns=[f"{s}/*" for s in suites]))
 
 
+def stage(root, cfg):
+    """Copy the gated suites to node-local disk ($RCE_STAGE_DIR, set per job by cluster/run.sbatch) and return that
+    root: random frame reads from netscratch are ~50x slower than from local disk. No-op when unset."""
+    if not os.environ.get("RCE_STAGE_DIR"):
+        return Path(root)
+    local = Path(os.environ["RCE_STAGE_DIR"])
+    for suite in sorted({s for gates in (cfg.data.sources, cfg.eval.suites) for s, on in gates.items() if on}):
+        shutil.copytree(Path(root) / suite, local / suite, dirs_exist_ok=True)
+    return local
+
+
 def window(ds, t_K):
-    # h5py fancy indexing forbids repeats: read the contiguous slice, then index in numpy
-    lo = t_K.min()
-    return ds[lo:t_K.max() + 1][t_K - lo]
+    # h5py fancy indexing needs increasing unique indices: read those, then expand repeats in numpy
+    u, inv = np.unique(t_K, return_inverse=True)
+    return ds[u][inv]
+
+
+def instruction(f):
+    return json.loads(f["data"].attrs["problem_info"])["language_instruction"]
 
 
 class LiberoTask(Dataset):
-    """One task file. Sample at demo step t: obs window ends at t (first obs repeated), action window starts at t
-    (last action repeated). -> state [O, S] f32, image [O, V, H, W, C] u8, action [P, A] f32, lang str."""
+    """One task file. Sample at demo step t: obs window ends at t with stride obs_stride (first obs repeated), action
+    window starts at t (last action repeated). -> state [O, S] f32, image [O, V, H, W, C] u8, action [P, A] f32, lang str."""
 
-    def __init__(self, path, demos, obs_horizon, action_horizon):
-        self.path, self.O, self.P = path, obs_horizon, action_horizon
+    def __init__(self, path, demos, obs_horizon, action_horizon, obs_stride=1):
+        self.path, self.demos, self.O, self.P, self.stride = path, demos, obs_horizon, action_horizon, obs_stride
         with h5py.File(path) as f:
-            self.lang = json.loads(f["data"].attrs["problem_info"])["language_instruction"]
+            self.lang = instruction(f)
             self.index = [(d, t, n) for d in demos for n in [len(f[f"data/{d}/actions"])] for t in range(n)]
 
     def __len__(self):
         return len(self.index)
 
+    def obs_index(self, d, t):
+        return np.clip(t - self.stride * np.arange(self.O - 1, -1, -1), 0, None)
+
     def __getitem__(self, i):
         d, t, n = self.index[i]
-        obs_t_O = np.clip(np.arange(t - self.O + 1, t + 1), 0, None)
+        obs_t_O = self.obs_index(d, t)
         act_t_P = np.clip(np.arange(t, t + self.P), None, n - 1)
         with h5py.File(self.path) as f:  # opened per item: h5py handles don't survive DataLoader workers
             g = f[f"data/{d}"]
             state_OS = np.concatenate([window(g["obs/ee_states"], obs_t_O), window(g["obs/gripper_states"], obs_t_O)], -1) # robot state
             image_OVHWC = np.stack([window(g["obs/agentview_rgb"], obs_t_O), window(g["obs/eye_in_hand_rgb"], obs_t_O)], 1) # image state from cams
             action_PA = window(g["actions"], act_t_P) # future action chunk aka the label
-        return dict(state=state_OS.astype(np.float32), image=image_OVHWC, action=action_PA.astype(np.float32), 
+        return dict(state=state_OS.astype(np.float32), image=image_OVHWC, action=action_PA.astype(np.float32),
                     lang=self.lang)
 
 
 def build_datasets(cfg, root):
-    """Gated by cfg.data.sources.<suite>. Last ceil(val_ratio * demos) demos of each task -> test."""
+    """Gated by cfg.data.sources.<suite>. Last ceil(val_ratio * demos) demos of each task -> test.
+    Per-file dataset class: cfg.data.task (partial; LiberoTask by default)."""
+    make = instantiate(cfg.data.task)
     train, test = [], []
     for suite in (s for s, on in cfg.data.sources.items() if on):
         for path in sorted((Path(root) / suite).glob("*.hdf5")):
             with h5py.File(path) as f:
                 demos = sorted(f["data"], key=lambda d: int(d.split("_")[1]))
             split = len(demos) - math.ceil(cfg.data.val_ratio * len(demos))
-            train.append(LiberoTask(path, demos[:split], cfg.data.obs_horizon, cfg.data.action_horizon))
-            test.append(LiberoTask(path, demos[split:], cfg.data.obs_horizon, cfg.data.action_horizon))
+            train.append(make(path, demos[:split], cfg.data.obs_horizon, cfg.data.action_horizon))
+            test.append(make(path, demos[split:], cfg.data.obs_horizon, cfg.data.action_horizon))
     return ConcatDataset(train), ConcatDataset(test)
+
+
+def action_stats(dataset):
+    """Per-dim mean, std [A] over every action of the dataset's demos."""
+    actions_NA = []
+    for task in dataset.datasets:
+        with h5py.File(task.path) as f:
+            actions_NA += [f[f"data/{d}/actions"][:] for d in task.demos]
+    actions_NA = np.concatenate(actions_NA)
+    return actions_NA.mean(0), actions_NA.std(0)
