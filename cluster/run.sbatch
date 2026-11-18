@@ -21,5 +21,10 @@ export UV_PROJECT_ENVIRONMENT="${UV_PROJECT_ENVIRONMENT:-$HOME/venvs/cs2420-rce-
 local_root=/scratch; [ -d "$local_root" ] || local_root=/tmp
 export RCE_STAGE_DIR="$local_root/$USER/rce-$SLURM_JOB_ID"
 trap 'rm -rf "$RCE_STAGE_DIR"' EXIT
+# RoboMME (SAPIEN) renders through Vulkan; FASRC nodes may ship no NVIDIA ICD json
+if ! ls /usr/share/vulkan/icd.d/nvidia_icd.json /etc/vulkan/icd.d/nvidia_icd.json >/dev/null 2>&1; then
+  echo '{"file_format_version": "1.0.0", "ICD": {"library_path": "libGLX_nvidia.so.0", "api_version": "1.3.0"}}' > "$(dirname "$1")/nvidia_icd.json"
+  export VK_ICD_FILENAMES="$(dirname "$1")/nvidia_icd.json"
+fi
 uv pip freeze --python "$UV_PROJECT_ENVIRONMENT" > "$(dirname "$1")/freeze.txt"
 uv run --no-sync --frozen python -m src.run "$1"
