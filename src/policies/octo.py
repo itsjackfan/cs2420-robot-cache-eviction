@@ -200,6 +200,16 @@ class OctoPolicy(Policy):
         for lin in (self.head.time[1], self.head.time[3], self.head.reverse.inp, self.head.reverse.out):
             nn.init.xavier_uniform_(lin.weight)
 
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+        """Octo finetune semantics: kwargs override the hub config; tensors whose shape changed (the diffusion head
+        under a new action_horizon) keep their fresh init, everything else loads."""
+        pre = super().from_pretrained(pretrained_model_name_or_path)
+        model = cls(**{**pre._hub_mixin_config, **kwargs})
+        own = model.state_dict()
+        model.load_state_dict({k: v for k, v in pre.state_dict().items() if v.shape == own[k].shape}, strict=False)
+        return model
+
     def set_action_stats(self, mean_A, std_A):
         self.action_mean_A.copy_(mean_A), self.action_std_A.copy_(std_A)
 

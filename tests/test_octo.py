@@ -100,3 +100,15 @@ def test_config_loads_pretrained_weights(tmp_path):
     assert isinstance(policy, OctoPolicy)
     assert all(torch.equal(a, b) for a, b in zip(policy.state_dict().values(), ref.state_dict().values()))
     assert compose(["policy=octo_small"]).policy.pretrained_model_name_or_path == "jackfanml/octo-small-1.5-torch"
+
+
+def test_new_action_horizon_reinits_only_resized_head(tmp_path):
+    ref = OctoPolicy(size="small", action_horizon=4)
+    ref.save_pretrained(tmp_path)
+    cfg = compose(["policy=octo_small_robomme", f"policy.pretrained_model_name_or_path={tmp_path}"])
+    policy = instantiate(cfg.policy)
+    assert policy.P == 20 and policy.flip is False
+    own, src = policy.state_dict(), ref.state_dict()
+    resized = {k for k in own if own[k].shape != src[k].shape}
+    assert resized == {"head.reverse.inp.weight", "head.reverse.out.weight", "head.reverse.out.bias"}
+    assert all(torch.equal(own[k], src[k]) for k in own if k not in resized)
