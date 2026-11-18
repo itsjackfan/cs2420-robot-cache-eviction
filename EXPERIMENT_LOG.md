@@ -67,6 +67,24 @@ Baselines were more or less vibe coded and had bugs, so conclusions are unclear.
 - LAC requires better / further training, and often struggles due to cache staleness.
 - KeyframeChaining will require significant compute to train the initial contrastive encoder as well as the lightweight query-base network.
 
+## train-gan (branch: train-gan)
+We seek to train a frame discriminator in 2 stages that, at any point in time, can make a classification for a particular frame about whether or not to keep it. We begin with a simple adversarial methodology where we will train a diffusion model to generate (or augment) counterfactuals and have our frame discriminator attempt to classify the frame's scenario as relevant or not. We plan to attempt to introduce an automatic labelling and augmentation framework based on existing long-horizon samples and datasets, as well as making use of those in e.g. the OXE or other commonplace datasets.
+
+PHASES:
+1. initial labelling, augmentation, and classifier training at small scales, ablating on different objectives and auxiliary inputs
+2. given the recipe from part 1, begin fine-tuning a diffusion model to generate similar, relevant samples (both positive and negative)
+3. jointly train the classifier with the overall Octo base model as a learned keep/eliminate estimator, with gradients flowing through to it from an aux loss
+
+- 2026-11-17 17:32 `robomme-baselines`: given the new benchmark, run meaningful baselines on memory methods for each using the Octo model
+    - Baseline runs will include:
+        - run standard Octo fine-tuned for 50k steps on the canonical RoboMME/`real-robot` datasets with window 1, 2, and 4 (`robomme-octo-w1`, `robomme-octo-w2`, `robomme-octo-w4`, `robomme-vlacache`)
+        - run a baseline memory / compute method like VLA-Cache, similar 50k fine-tuning steps recipe
+- 2026-11-17 16:54 `train-gan-1-pipeline`: develop basic data pipeline and labelling based on `attn-probe` results and entropy probing to see if we can automatically label and augment for classifier training
+    - Read in dataset from RoboMME
+    - In a gold, transformer/history-based rollout on baseline models, collect metrics on which frames or patches are more important via attention scores (cross and self), drop in performance if removed across multiple Monte Carlo trials, grad norm at that particular input
+    - Visually inspect (LLM as a judge) the outputs as a second-layer verification on whether the learned "important" segments are accurate
+    - Run labelling pipeline for all long=context demos
+    - Augment positive pairs with traditional CV (blurring, colour/saturation shift; NOTE: do NOT modify rotation or perspective especially for wrist and hand cams, as this might change the robot policy's inbuilt biases and mess with the model) + generative techniques and label as fine-tuning input for small diffusion model (more preparation can be done later in phase 2)
 
 # NOTES FROM HT
 **09 Nov**:
