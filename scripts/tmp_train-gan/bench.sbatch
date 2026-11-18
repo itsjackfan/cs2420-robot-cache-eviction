@@ -13,6 +13,8 @@ OUT=$1
 mkdir -p "$OUT"
 export UV_PROJECT_ENVIRONMENT=$HOME/venvs/cs2420-rce-train-gan  # own venv: robomme deps stay out of the shared one
 export PYTHONPATH=$PWD
+# a nested robomme submodule uses an ssh github url; nodes have no github key
+export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=url.https://github.com/.insteadOf GIT_CONFIG_VALUE_0=git@github.com:
 nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv
 uv sync --group robomme
 uv run --no-sync python scripts/tmp_train-gan/bench_octo.py 4
