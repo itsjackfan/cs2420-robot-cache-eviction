@@ -16,8 +16,8 @@ from src.policies.octo import VIEWS, OctoPolicy, encode_language
 
 class VLACachePolicy(OctoPolicy):
     def __init__(self, size: str = "small", action_horizon: int = 4, tau: float = 0.996, top_k: int = 100,
-                 tau_task: float = 0.5, alpha_scale: float = 1.0):
-        super().__init__(size, action_horizon)
+                 tau_task: float = 0.5, alpha_scale: float = 1.0, flip: bool = True):
+        super().__init__(size, action_horizon, flip=flip)
         self.tau, self.top_k, self.tau_task, self.alpha_scale = tau, top_k, tau_task, alpha_scale
         self.prev = None
 

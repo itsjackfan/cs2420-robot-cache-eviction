@@ -22,7 +22,7 @@ def test_init_from_loads_policy_weights(cfg, fake_tasks, wandb_mock, tmp_path, m
     with open_dict(cfg):
         cfg.init_from = str(tmp_path / "src.pt")
     seen = []
-    monkeypatch.setattr("src.run.evaluate", lambda policy, cfg, root: seen.append(policy.dummy.item()) or {})
+    monkeypatch.setattr("src.rollout.evaluate",lambda policy, cfg, root: seen.append(policy.dummy.item()) or {})
     main(cfg)
     assert seen == [3.0]
 

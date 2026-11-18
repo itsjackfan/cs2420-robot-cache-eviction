@@ -1,4 +1,4 @@
-"""LIBERO HDF5 demos (HF: yifengzhu-hf/LIBERO-datasets) -> windowed samples.
+"""Task files -> windowed samples: LIBERO HDF5 demos (HF: yifengzhu-hf/LIBERO-datasets) here, RoboMME in src/robomme.py.
 Dims: O obs horizon, P action horizon, V views (agentview, wrist), H height, W width, C rgb,
 S state (8 = eef pos 3 + axis-angle 3 + gripper 2), A action (7), K window length."""
 from pathlib import Path
@@ -53,6 +53,15 @@ class LiberoTask(Dataset):
             self.lang = instruction(f)
             self.index = [(d, t, n) for d in demos for n in [len(f[f"data/{d}/actions"])] for t in range(n)]
 
+    @staticmethod
+    def demos_in(path):
+        with h5py.File(path) as f:
+            return sorted(f["data"], key=lambda d: int(d.split("_")[1]))
+
+    def actions(self):
+        with h5py.File(self.path) as f:
+            return np.concatenate([f[f"data/{d}/actions"][:] for d in self.demos])
+
     def __len__(self):
         return len(self.index)
 
@@ -73,14 +82,13 @@ class LiberoTask(Dataset):
 
 
 def build_datasets(cfg, root):
-    """Gated by cfg.data.sources.<suite>. Last ceil(val_ratio * demos) demos of each task -> test.
-    Per-file dataset class: cfg.data.task (partial; LiberoTask by default)."""
+    """Gated by cfg.data.sources.<suite>: every <root>/<suite>/*.<cfg.data.ext> task file. Last
+    ceil(val_ratio * demos) demos of each task -> test. Per-file dataset class: cfg.data.task (partial)."""
     make = instantiate(cfg.data.task)
     train, test = [], []
     for suite in (s for s, on in cfg.data.sources.items() if on):
-        for path in sorted((Path(root) / suite).glob("*.hdf5")):
-            with h5py.File(path) as f:
-                demos = sorted(f["data"], key=lambda d: int(d.split("_")[1]))
+        for path in sorted((Path(root) / suite).glob(f"*.{cfg.data.ext}")):
+            demos = make.func.demos_in(path)
             split = len(demos) - math.ceil(cfg.data.val_ratio * len(demos))
             train.append(make(path, demos[:split], cfg.data.obs_horizon, cfg.data.action_horizon))
             test.append(make(path, demos[split:], cfg.data.obs_horizon, cfg.data.action_horizon))
@@ -88,10 +96,6 @@ def build_datasets(cfg, root):
 
 
 def action_stats(dataset):
-    """Per-dim mean, std [A] over every action of the dataset's demos."""
-    actions_NA = []
-    for task in dataset.datasets:
-        with h5py.File(task.path) as f:
-            actions_NA += [f[f"data/{d}/actions"][:] for d in task.demos]
-    actions_NA = np.concatenate(actions_NA)
+    """Per-dim mean, std [A] over every action the dataset's tasks train on (Task.actions())."""
+    actions_NA = np.concatenate([task.actions() for task in dataset.datasets])
     return actions_NA.mean(0), actions_NA.std(0)

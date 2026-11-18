@@ -170,10 +170,10 @@ class DiffusionHead(nn.Module):
 
 
 class OctoPolicy(Policy):
-    def __init__(self, size: str = "small", action_horizon: int = 4, augment: bool = True):
+    def __init__(self, size: str = "small", action_horizon: int = 4, augment: bool = True, flip: bool = True):
         super().__init__()
         d, heads, mlp = SIZES[size].values()
-        self.P, self.augment, self.d, self.mlp = action_horizon, augment, d, mlp
+        self.P, self.augment, self.flip, self.d, self.mlp = action_horizon, augment, flip, d, mlp
         self.stats = defaultdict(list)
         self.stems = nn.ModuleDict({name: SmallStem16() for name in VIEWS})
         self.proj = nn.ModuleDict({"task_language": nn.Linear(768, d),
@@ -213,8 +213,8 @@ class OctoPolicy(Policy):
         return torch.cat([pose, 1 - 2 * x_BPA[..., 6:]], -1)
 
     def views(self, obs):
-        """libero obs -> {name: [B, O, C, H, W] in [0, 1]} at octo resolutions (flipped upright, augmented if training)."""
-        image = obs["image"].flip(-3)  # libero renders upside down; octo saw upright images
+        """obs -> {name: [B, O, C, H, W] in [0, 1]} at octo resolutions (flipped upright if self.flip, augmented if training)."""
+        image = obs["image"].flip(-3) if self.flip else obs["image"]  # libero renders upside down; octo saw upright images
         B = image.shape[0]
         out = {}
         for name, (view, res) in VIEWS.items():

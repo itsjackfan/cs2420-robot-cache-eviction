@@ -1,0 +1,13 @@
+# @package _global_
+# Octo-Small on RoboMME (use with data=robomme eval=robomme train=octo): MME-VLA chunk 20 / 16 executed, upright
+# images. Window via data.obs_horizon (stride data.task.obs_stride).
+defaults:
+  - octo_small
+  - _self_
+
+policy:
+  flip: false
+data:
+  action_horizon: 20
+eval:
+  n_action_steps: 16

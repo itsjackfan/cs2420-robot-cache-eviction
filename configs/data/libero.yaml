@@ -1,5 +1,6 @@
 repo_id: yifengzhu-hf/LIBERO-datasets
-root: null                              # local dir with <suite>/*.hdf5; null -> HF download
+root: null                              # local dir with <suite>/*.<ext>; null -> HF download
+ext: hdf5
 download_dir: ${oc.env:RCE_DATA_DIR,data}/LIBERO  # downloaded once, shared by all runs
 obs_horizon: 2
 action_horizon: 16

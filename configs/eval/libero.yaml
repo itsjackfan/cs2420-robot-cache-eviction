@@ -1,3 +1,4 @@
+fn: src.rollout.evaluate  # evaluate(policy, cfg, root) -> metrics
 suites:              # gates
   libero_spatial: true
   libero_object: false

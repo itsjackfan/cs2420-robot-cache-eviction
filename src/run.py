@@ -12,7 +12,6 @@ from omegaconf import OmegaConf
 from src import checkpoint
 from src.data import action_stats, build_datasets, resolve_root, stage
 from src.logger import Logger
-from src.rollout import evaluate
 def main(cfg):
     run_dir = Path(cfg.run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -26,7 +25,7 @@ def main(cfg):
         policy.load_state_dict(checkpoint.load(cfg.init_from)["policy"], strict=False)
     policy.to(cfg.device)
     logger = Logger(cfg)
-    evaluate_fn = partial(evaluate, cfg=cfg, root=root)
+    evaluate_fn = partial(get_method(cfg.eval.fn), cfg=cfg, root=root)
     step = get_method(cfg.train.loop)(cfg, policy, train_set, test_set, logger, evaluate_fn)
     logger.log(evaluate_fn(policy), step)
     logger.finish()
