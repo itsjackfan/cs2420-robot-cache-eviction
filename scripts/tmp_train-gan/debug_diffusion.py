@@ -22,6 +22,8 @@ torch.manual_seed(0)
 def main(run_dir):
     cfg = OmegaConf.load(Path(run_dir) / "config.yaml")
     cfg.device = "cpu"
+    cfg.data.ext = cfg.data.get("ext") or "hdf5"  # pre-RoboMME (LIBERO) configs
+    cfg.data.root = cfg.data.root or cfg.data.download_dir
     policy = instantiate(cfg.policy)
     policy.load_state_dict(torch.load(Path(run_dir) / "latest.pt", map_location="cpu", weights_only=False)["policy"])
     policy.eval()
