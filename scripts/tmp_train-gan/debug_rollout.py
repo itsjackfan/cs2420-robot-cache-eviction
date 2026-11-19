@@ -67,4 +67,4 @@ def main(run_dir, tasks=("BinFill", "MoveCube")):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], *sys.argv[2:])
+    main(sys.argv[1], sys.argv[2:] or ("BinFill", "MoveCube"))
