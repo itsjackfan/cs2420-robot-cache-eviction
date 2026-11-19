@@ -48,6 +48,17 @@ def test_loss_backward_and_predict(O):
     assert action_BPA.shape == (2, 4, 7) and torch.isfinite(action_BPA).all()
 
 
+def test_eval_loss_adds_diffusion_diagnostics_train_does_not():
+    policy = OctoPolicy(size="small")
+    keys = {"eps_mse_k0", "eps_mse_k9", "eps_mse_k18", "eps_mse_k19", "sample_err", "sample_sat"}
+    assert set(policy.compute_loss(batch())) == {"loss"}
+    with torch.no_grad():
+        out = policy.eval().compute_loss(batch())
+    assert set(out) == {"loss"} | keys
+    assert all(out[k].ndim == 0 and torch.isfinite(out[k]) for k in out)
+    assert 0 <= out["sample_sat"] <= 1
+
+
 def tokens(policy, O=1):
     views = policy.views(batch(B=1, O=O))
     return policy.tokenize(views, torch.zeros(1, 16, 768))

@@ -332,8 +332,27 @@ class OctoPolicy(Policy):
         return F.mse_loss(self.head(emb_BD, noisy_BF, k_B1), eps_BF) * 7
 
     def compute_loss(self, batch):
-        """Diffusion loss at the last window step (window 1 in the finetune config)."""
-        return {"loss": self.denoise_loss(self.embed(batch)[:, -1], batch["action"])}
+        """Diffusion loss at the last window step (window 1 in the finetune config). Eval mode adds diffusion_stats."""
+        emb_BD = self.embed(batch)[:, -1]
+        out = {"loss": self.denoise_loss(emb_BD, batch["action"])}
+        if not self.training:
+            out |= self.diffusion_stats(emb_BD, batch["action"])
+        return out
+
+    @torch.no_grad()
+    def diffusion_stats(self, emb_BD, action_BPA):
+        """eps MSE at fixed k (the k=19 error is amplified ~1/sqrt(alpha_19) = 32x by sampling) and the sampled chunk's
+        mean |error| vs ground truth (normalized) and fraction at the +-MAX_ACTION clamp."""
+        x0_BF = rearrange(self.to_model(action_BPA), "b p a -> b (p a)").clamp(-MAX_ACTION, MAX_ACTION)
+        h, out = self.head, {}
+        for k in (0, 9, 18, 19):
+            eps_BF = torch.randn_like(x0_BF)
+            noisy_BF = h.alpha_hats_K[k].sqrt() * x0_BF + (1 - h.alpha_hats_K[k]).sqrt() * eps_BF
+            out[f"eps_mse_k{k}"] = F.mse_loss(h(emb_BD, noisy_BF, torch.full((len(x0_BF), 1), k, device=x0_BF.device)), eps_BF)
+        x_BF = self.denoise(emb_BD)
+        out["sample_err"] = (x_BF - x0_BF).abs().mean()
+        out["sample_sat"] = (x_BF.abs() >= MAX_ACTION).float().mean()
+        return out
 
     @torch.no_grad()
     def predict_action(self, obs):
@@ -341,7 +360,12 @@ class OctoPolicy(Policy):
 
     @torch.no_grad()
     def sample(self, emb_BD):
-        """DDPM reverse process -> libero action [B, P, A]."""
+        """-> libero action [B, P, A]."""
+        return self.from_model(rearrange(self.denoise(emb_BD), "b (p a) -> b p a", p=self.P))
+
+    @torch.no_grad()
+    def denoise(self, emb_BD):
+        """DDPM reverse process -> normalized flat action chunk [B, F]."""
         x_BF = torch.randn(emb_BD.shape[0], self.P * 7, device=emb_BD.device)
         h = self.head
         for k in reversed(range(DIFFUSION_STEPS)):
@@ -350,4 +374,4 @@ class OctoPolicy(Policy):
             if k > 0:
                 x_BF = x_BF + h.betas_K[k].sqrt() * torch.randn_like(x_BF)
             x_BF = x_BF.clamp(-MAX_ACTION, MAX_ACTION)
-        return self.from_model(rearrange(x_BF, "b (p a) -> b p a", p=self.P))
+        return x_BF
