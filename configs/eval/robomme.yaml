@@ -4,6 +4,6 @@ tasks: [BinFill, PickXtimes, SwingXtimes, StopCube, VideoUnmask, VideoUnmaskSwap
         PickHighlight, VideoRepick, VideoPlaceButton, VideoPlaceOrder, MoveCube, InsertPeg, PatternLock, RouteStick]
 n_train: 1               # episodes/task from train-split seeds -> train/*
 n_test: 5                # episodes/task from the test split (max 50; 50 for reported numbers) -> test/*
-n_action_steps: 16       # MME-VLA executes 16 of 20
+n_action_steps: 4        # Octo-native: executes the whole chunk of 4
 max_steps: 1300          # control steps excl. the conditioning video, as MME-VLA
 video: true              # first episode per split

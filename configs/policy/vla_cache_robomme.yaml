@@ -1,12 +1,8 @@
 # @package _global_
-# VLA-Cache on a RoboMME-finetuned Octo-Small (window 1; eval only). Use with data=robomme eval=robomme.
+# VLA-Cache on a RoboMME-finetuned Octo-Small (window 1, chunk 4; eval only). Use with data=robomme eval=robomme.
 defaults:
   - vla_cache
   - _self_
 
 policy:
   flip: false
-data:
-  action_horizon: 20
-eval:
-  n_action_steps: 16

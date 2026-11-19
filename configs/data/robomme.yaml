@@ -1,7 +1,7 @@
 root: ${oc.env:RCE_DATA_DIR,data}  # converted files in <root>/robomme/<task>.h5 (scripts/tmp_train-gan/convert_robomme.py)
 ext: h5
 obs_horizon: 1
-action_horizon: 20                 # MME-VLA chunk (RoboMME paper sec. 5.1)
+action_horizon: 4                  # Octo-native chunk (MME-VLA's 20 breaks Octo's DDPM head)
 val_ratio: 0.1                     # last 10 of 100 demos per task -> test/loss
 task:
   _target_: src.robomme.RoboMMETask

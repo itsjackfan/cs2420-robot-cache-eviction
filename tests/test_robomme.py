@@ -33,7 +33,8 @@ def write_raw(path, n_eps=4):
                 t["obs/wrist_rgb"] = np.full((H, W, 3), 200, np.uint8)
                 t["obs/eef_state"] = np.array([k, 0, 0, 3.14, 0, 0], np.float32)
                 t["obs/gripper_state"] = np.full(2, 0.04, np.float32)
-                t["action/eef_action"] = np.array([100 * e + k, 0, 0, 3.14, 0, 0, -1.0 if k % 2 == 0 else 1.0])
+                roll = 3.14 if k % 3 else -3.14  # PatternLock / RouteStick store roll on both sides of the +-pi wrap
+                t["action/eef_action"] = np.array([100 * e + k, 0, 0, roll, 0, 0, -1.0 if k % 2 == 0 else 1.0])
                 t["info/is_video_demo"] = k <= VIDEO
                 t["info/is_subgoal_boundary"] = k == N
                 t["obs/front_depth"] = np.zeros((H, W, 1), np.int16)  # dropped by convert
@@ -86,9 +87,16 @@ def test_samples_skip_video_and_window_reaches_into_it(rcfg, robomme_root):
 
 def test_action_stats_execution_steps_only(rcfg, robomme_root):
     train, _ = build_datasets(rcfg, robomme_root)
-    mean_A, _ = action_stats(train)
+    mean_A, std_A = action_stats(train)
     x_N = np.concatenate([100 * e + np.arange(VIDEO + 1, N + 1) for e in range(3)])
     assert np.isclose(mean_A[0], x_N.mean())
+    assert np.isclose(mean_A[3], 3.14, atol=0.01) and std_A[3] < 0.01  # roll unimodal after the [0, 2pi) wrap
+
+
+def test_roll_wrapped_into_0_2pi(rcfg, robomme_root):
+    train, _ = build_datasets(rcfg, robomme_root)
+    roll = np.concatenate([train[i]["action"][:, 3] for i in range(len(train))])
+    assert np.allclose(roll, 3.14, atol=0.01)
 
 
 def test_to_env_flips_and_binarizes_gripper():
@@ -177,7 +185,7 @@ def test_evaluate(rcfg, fake_robomme):
 def test_robomme_configs_compose():
     for policy in ("octo_small_robomme", "vla_cache_robomme"):
         cfg = compose(["data=robomme", "eval=robomme", f"policy={policy}", "train=octo", "++init_from=/x/latest.pt"])
-        assert cfg.data.action_horizon == 20 and cfg.eval.n_action_steps == 16 and cfg.eval.max_steps == 1300
+        assert cfg.data.action_horizon == 4 and cfg.eval.n_action_steps == 4 and cfg.eval.max_steps == 1300
         assert cfg.data.task.obs_stride == 8 and cfg.policy.flip is False and cfg.eval.fn == "src.robomme.evaluate"
     assert compose(["policy=octo_small"]).eval.fn == "src.rollout.evaluate"
 

@@ -32,6 +32,13 @@ def decode(jpeg):
     return decode_jpeg(torch.from_numpy(jpeg)).permute(1, 2, 0).numpy()
 
 
+def wrap_roll(action_NA):
+    """Roll into [0, 2 pi): PatternLock / RouteStick store it on both sides of +-pi (others at ~+pi), which makes it
+    bimodal under the z-score. The env takes the wrapped value (demos go up to 3.16)."""
+    action_NA[..., 3] %= 2 * np.pi
+    return action_NA
+
+
 def convert(src, dst):
     """Raw record_dataset_<task>.h5 (one group per timestep, uncompressed, with depth) -> converted file (above)."""
     jpegs = h5py.vlen_dtype(np.uint8)
@@ -70,7 +77,7 @@ class RoboMMETask(Dataset):
 
     def actions(self):
         with h5py.File(self.path) as f:
-            return np.concatenate([f[d]["action"][:][~f[d]["video"][:]] for d in self.demos])
+            return wrap_roll(np.concatenate([f[d]["action"][:][~f[d]["video"][:]] for d in self.demos]))
 
     def __len__(self):
         return len(self.index)
@@ -82,7 +89,7 @@ class RoboMMETask(Dataset):
         with h5py.File(self.path) as f:  # opened per item: h5py handles don't survive DataLoader workers
             g = f[d]
             image_OVHWC = np.stack([np.stack([decode(j) for j in window(g[v], obs_t_O)]) for v in ("front", "wrist")], 1)
-            return dict(state=window(g["state"], obs_t_O), image=image_OVHWC, action=window(g["action"], act_t_P),
+            return dict(state=window(g["state"], obs_t_O), image=image_OVHWC, action=wrap_roll(window(g["action"], act_t_P)),
                         lang=self.lang[d])
 
 

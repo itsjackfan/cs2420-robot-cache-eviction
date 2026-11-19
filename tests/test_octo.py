@@ -105,7 +105,7 @@ def test_config_loads_pretrained_weights(tmp_path):
 def test_new_action_horizon_reinits_only_resized_head(tmp_path):
     ref = OctoPolicy(size="small", action_horizon=4)
     ref.save_pretrained(tmp_path)
-    cfg = compose(["policy=octo_small_robomme", f"policy.pretrained_model_name_or_path={tmp_path}"])
+    cfg = compose(["policy=octo_small_robomme", "data.action_horizon=20", f"policy.pretrained_model_name_or_path={tmp_path}"])
     policy = instantiate(cfg.policy)
     assert policy.P == 20 and policy.flip is False
     own, src = policy.state_dict(), ref.state_dict()
