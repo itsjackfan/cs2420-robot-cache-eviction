@@ -163,6 +163,7 @@ def test_evaluate(rcfg, fake_robomme):
     for split in ("train", "test"):
         assert m[f"{split}/robomme/BinFill/mean_score"] == 1.0 and m[f"{split}/robomme/MoveCube/mean_score"] == 0.0
         assert m[f"{split}/mean_score"] == 0.5 and m[f"{split}/control_hz"] > 0
+        assert m[f"{split}/error_rate"] == 0.5 and m[f"{split}/mean_steps"] == (5 + 3) / 2  # MoveCube: IK error at step 3
     assert m["test/robomme/video"].ndim == 4
     first = seen[0]  # history at reset = video + current frame; window ends at the current frame, stride 2
     assert first["image"].shape == (1, 3, 2, H, W, 3) and first["lang"] == ["fake goal"]

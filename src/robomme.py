@@ -123,12 +123,15 @@ def episode(env, policy, cfg, record):
             history.extend(frames(obs))
             if record:
                 video_FHWC.append(np_(obs["front_rgb_list"][-1]))
-    return dict(score=float(info.get("status") == "success"), steps=steps, infer_s=infer_s,
+    print(f"episode end: status={info.get('status')} steps={steps} {info.get('error_message', '')}", flush=True)
+    return dict(score=float(info.get("status") == "success"), error=float(info.get("status") == "error"),
+                steps=steps, infer_s=infer_s,
                 video_FHWC=np.stack(video_FHWC) if record and video_FHWC else None, policy_stats=policy.episode_stats())
 
 
 def evaluate(policy, cfg, root):
-    """-> {split}/robomme/<task>/mean_score, {split}/robomme/video, {split}/{mean_score,control_hz,<policy stats>}.
+    """-> {split}/robomme/<task>/mean_score, {split}/robomme/video,
+    {split}/{mean_score,error_rate,mean_steps,control_hz,<policy stats>}.
     train = RoboMME train-split episodes (the training demos' seeds); test = official test episodes (50 per task)."""
     from robomme.env_record_wrapper import BenchmarkEnvBuilder
     was_training = policy.training
@@ -155,6 +158,8 @@ def evaluate(policy, cfg, root):
         if split_eps[0]["video_FHWC"] is not None:
             metrics[f"{split}/robomme/video"] = split_eps[0]["video_FHWC"]
         metrics[f"{split}/mean_score"] = float(np.mean([e["score"] for e in split_eps]))
+        metrics[f"{split}/error_rate"] = float(np.mean([e["error"] for e in split_eps]))  # env status "error" (IK fail)
+        metrics[f"{split}/mean_steps"] = float(np.mean([e["steps"] for e in split_eps]))
         metrics[f"{split}/control_hz"] = sum(e["steps"] for e in split_eps) / sum(e["infer_s"] for e in split_eps)
         for k in split_eps[0]["policy_stats"]:
             metrics[f"{split}/{k}"] = float(np.mean([e["policy_stats"][k] for e in split_eps]))
