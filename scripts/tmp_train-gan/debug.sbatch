@@ -12,7 +12,7 @@ set -a; source .env; set +a
 export UV_PROJECT_ENVIRONMENT=$HOME/venvs/cs2420-rce-train-gan PYTHONPATH=$PWD HF_HUB_OFFLINE=1
 export HF_HUB_CACHE="${HF_HUB_CACHE:-/n/netscratch/ydu_lab/Lab/$USER/hf/hub}"
 if ! ls /usr/share/vulkan/icd.d/nvidia_icd.json /etc/vulkan/icd.d/nvidia_icd.json >/dev/null 2>&1; then
-  echo '{"file_format_version": "1.0.0", "ICD": {"library_path": "libGLX_nvidia.so.0", "api_version": "1.3.0"}}' > "$TMPDIR/nvidia_icd.json"
-  export VK_ICD_FILENAMES=$TMPDIR/nvidia_icd.json
+  echo '{"file_format_version": "1.0.0", "ICD": {"library_path": "libGLX_nvidia.so.0", "api_version": "1.3.0"}}' > "$1/nvidia_icd.json"
+  export VK_ICD_FILENAMES=$1/nvidia_icd.json
 fi
 uv run --no-sync python scripts/tmp_train-gan/debug_rollout.py "$1" BinFill MoveCube VideoUnmask
