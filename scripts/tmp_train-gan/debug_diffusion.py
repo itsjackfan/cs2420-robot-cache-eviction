@@ -59,10 +59,10 @@ def main(run_dir):
             print(f"  k={k:2d} pre-clamp {x.abs().mean():.3f} / {x.abs().max():.3f}  frac>5: {(x.abs() > MAX_ACTION).float().mean():.3f}")
             x = x.clamp(-MAX_ACTION, MAX_ACTION)
         print("final x0 error vs GT:", (x - x0_BF).abs().mean().item())
-        # candidate: DDPM posterior mean from the clipped x0 estimate (diffusers clip_sample)
-        for trial in range(3):
+        # candidates: DDPM posterior mean from the clipped x0 estimate (diffusers clip_sample), starting at k_start
+        for k_start, trial in [(19, 0), (19, 1), (18, 0), (18, 1), (17, 0), (17, 1)]:
             x = torch.randn_like(x0_BF)
-            for k in reversed(range(DIFFUSION_STEPS)):
+            for k in reversed(range(k_start + 1)):
                 eps = h(emb_BD, x, torch.full((len(batch), 1), k))
                 a, a_prev = h.alpha_hats_K[k], h.alpha_hats_K[k - 1] if k > 0 else torch.tensor(1.0)
                 x0_hat = ((x - (1 - a).sqrt() * eps) / a.sqrt()).clamp(-MAX_ACTION, MAX_ACTION)
@@ -70,7 +70,18 @@ def main(run_dir):
                 if k > 0:
                     x = x + ((1 - a_prev) / (1 - a) * h.betas_K[k]).sqrt() * torch.randn_like(x)
             err_BPA = rearrange(x - x0_BF, "b (p a) -> b p a", a=7).abs()
-            print(f"clipped-x0 sampler trial {trial}: x0 error {err_BPA.mean():.3f}, per dim {err_BPA.mean((0, 1)).numpy()}")
+            print(f"clipped-x0 sampler from k={k_start} trial {trial}: x0 error {err_BPA.mean():.3f}, "
+                  f"per dim {err_BPA.mean((0, 1)).numpy()}")
+        # same, original (unclipped-x0) update from k_start
+        for k_start in (18, 17):
+            x = torch.randn_like(x0_BF)
+            for k in reversed(range(k_start + 1)):
+                eps = h(emb_BD, x, torch.full((len(batch), 1), k))
+                x = (x - (1 - h.alphas_K[k]) / (1 - h.alpha_hats_K[k]).sqrt() * eps) / h.alphas_K[k].sqrt()
+                if k > 0:
+                    x = x + h.betas_K[k].sqrt() * torch.randn_like(x)
+                x = x.clamp(-MAX_ACTION, MAX_ACTION)
+            print(f"original sampler from k={k_start}: x0 error {(x - x0_BF).abs().mean():.3f}")
         print("betas", h.betas_K.numpy(), "\nalpha_hats", h.alpha_hats_K.numpy())
 
 
