@@ -85,6 +85,7 @@ PHASES:
     - Visually inspect (LLM as a judge) the outputs as a second-layer verification on whether the learned "important" segments are accurate
     - Run labelling pipeline for all long=context demos
     - Augment positive pairs with traditional CV (blurring, colour/saturation shift; NOTE: do NOT modify rotation or perspective especially for wrist and hand cams, as this might change the robot policy's inbuilt biases and mess with the model) + generative techniques and label as fine-tuning input for small diffusion model (more preparation can be done later in phase 2)
+- 2026-11-19 11:32 `robomme-p4-fix`: P=20 was too many action steps and was not adequately trained to predict the right noise at high step count k=19, so we reduce to fewer action steps with `robomme-octo-p20-w1-cont` `robomme-octo-p4-w1` `robomme-octo-p4-w2` `robomme-octo-p4-w4` `robomme-vlacache-p4`
 
 # NOTES FROM HT
 **09 Nov**:
