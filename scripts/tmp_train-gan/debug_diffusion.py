@@ -12,7 +12,6 @@ from einops import rearrange
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
 
-from src import checkpoint
 from src.data import build_datasets
 from src.policies.octo import DIFFUSION_STEPS, MAX_ACTION
 
@@ -24,7 +23,7 @@ def main(run_dir):
     cfg = OmegaConf.load(Path(run_dir) / "config.yaml")
     cfg.device = "cpu"
     policy = instantiate(cfg.policy)
-    policy.load_state_dict(checkpoint.load(Path(run_dir) / "latest.pt", map_location="cpu")["policy"])
+    policy.load_state_dict(torch.load(Path(run_dir) / "latest.pt", map_location="cpu", weights_only=False)["policy"])
     policy.eval()
 
     print("roll (action dim 3) per task: min / max / frac < 0")
