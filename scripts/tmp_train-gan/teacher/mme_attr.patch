@@ -1,0 +1,197 @@
+diff --git a/examples/robomme/env_runner.py b/examples/robomme/env_runner.py
+index 9edff59..b8bd237 100644
+--- a/examples/robomme/env_runner.py
++++ b/examples/robomme/env_runner.py
+@@ -23,7 +23,7 @@ class EnvRunner:
+     expose initial observation and step API, and optional subgoal oracles.
+     """
+ 
+-    def __init__(self, env_id: str, video_save_dir: str, max_steps: int = 1300) -> None:
++    def __init__(self, env_id: str, video_save_dir: str, max_steps: int = 1300, dataset: str = "test") -> None:
+         if env_id not in TASK_NAME_LIST:
+             raise ValueError(f"Environment ID {env_id} not in {TASK_NAME_LIST}")
+         self.env_id = env_id
+@@ -31,7 +31,7 @@ class EnvRunner:
+ 
+         self.env_builder = BenchmarkEnvBuilder(
+             env_id=env_id,
+-            dataset="test",
++            dataset=dataset,
+             action_space="joint_angle",
+             gui_render=False,
+             max_steps=max_steps,
+diff --git a/examples/robomme/eval.py b/examples/robomme/eval.py
+index 245f305..4a6dab9 100644
+--- a/examples/robomme/eval.py
++++ b/examples/robomme/eval.py
+@@ -39,6 +39,10 @@ class Args:
+     overwrite: bool = False
+ 
+     use_history: bool = True
++    # robomme-large-attr: split, episodes per task (0 = all), and where to save rollout frames + memory attention
++    dataset: str = "test"
++    episodes: int = 0
++    attr_dir: str = ""
+     policy_name: str = "dummy_test"
+     model_seed: int = 42
+     model_ckpt_id: int = 80000
+@@ -84,6 +88,10 @@ class EpisodeEvaluator:
+ 
+         epstate = EpisodeState()
+         task_goal, recorder = self.init_episode(env_runner, epstate, video_save_dir)
++        # robomme-large-attr: every frame (conditioning video + execution) and every call's memory attention
++        attr = {"front": list(epstate.image_buffer), "wrist": list(epstate.wrist_image_buffer),
++                "state": list(epstate.state_buffer), "action": [], "calls": [],
++                "exec_start_idx": epstate.exec_start_idx}
+         subgoal_predictor.start_episode(epstate, env_runner)        
+ 
+         img, wrist_img, robot_state = epstate.get_current_obs()
+@@ -109,10 +117,12 @@ class EpisodeEvaluator:
+                 if has_api_error:
+                     break
+ 
+-                action_chunk = self.get_action_chunk(
+-                    client, epstate, img, wrist_img, robot_state, prompt, subgoal, 
++                action_chunk, resp = self.get_action_chunk(
++                    client, epstate, img, wrist_img, robot_state, prompt, subgoal,
+                     exec_horizon=self.args.obs_horizon
+                 )
++                attr["calls"].append({k: resp[k] for k in ("step_idx", "mem_frames", "mem_attn", "mem_attn_qlen")
++                                      if k in resp})
+ 
+                 epstate.action_plan.extend(action_chunk)
+                 epstate.clear_buffers()
+@@ -129,6 +139,8 @@ class EpisodeEvaluator:
+ 
+             img, wrist_img, robot_state = obs
+ 
++            attr["front"].append(img), attr["wrist"].append(wrist_img), attr["state"].append(robot_state)
++            attr["action"].append(action)
+             epstate.add_observation(img, wrist_img, robot_state)
+             recorder.record(
+                 image=img.copy(),
+@@ -144,6 +156,10 @@ class EpisodeEvaluator:
+         if success_flag == "unknown":
+             return "unknown"
+ 
++        if self.args.attr_dir:
++            save_attr(Path(self.args.attr_dir) / env_runner.env_id / f"ep{env_runner.episode_id}.npz", attr,
++                      success_flag, task_goal)
++
+         video_filename = f"{env_runner.env_id}_ep{env_runner.episode_id}_{success_flag}_{task_goal}_{env_runner.difficulty}.mp4"
+         recorder.save_video(video_filename)
+ 
+@@ -212,8 +228,23 @@ class EpisodeEvaluator:
+             element['simple_subgoal'] = subgoal
+             element['grounded_subgoal'] = subgoal
+ 
+-        action_chunk = client.infer(element)["actions"]
+-        return action_chunk[:exec_horizon]
++        resp = client.infer(element)
++        return resp["actions"][:exec_horizon], resp
++
++
++def save_attr(path: Path, attr: dict, outcome: str, task_goal: str) -> None:
++    """robomme-large-attr: one rollout -> npz. front / wrist [F] JPEG (q95) bytes, state [F, 8], action [F-1-exec_start, 8]
++    (joint space), exec_start_idx (frames before it are the conditioning video), and per policy call: step_idx [C]
++    (current frame), mem_frames [C, 32] (sampled frame indices), mem_attn [C, M, 512] (MemoryAttention probs per call,
++    UNORDERED across layers / denoising steps, mean over heads + query tokens), mem_attn_qlen [C, M] (query length of each MemoryAttention call)."""
++    import cv2
++    path.parent.mkdir(parents=True, exist_ok=True)
++    jpeg = lambda frames: np.array([cv2.imencode(".jpg", f[..., ::-1], [cv2.IMWRITE_JPEG_QUALITY, 95])[1] for f in frames],
++                                   dtype=object)
++    calls = {k: np.stack([c[k] for c in attr["calls"]]) for k in attr["calls"][0]} if attr["calls"] else {}
++    np.savez(path, front=jpeg(attr["front"]), wrist=jpeg(attr["wrist"]), state=np.stack(attr["state"]),
++             action=np.stack(attr["action"]) if attr["action"] else np.zeros((0, 8)),
++             exec_start_idx=attr["exec_start_idx"], outcome=outcome, task_goal=task_goal, **calls)
+ 
+ 
+ def setup_save_directory(args: Args) -> Path:
+@@ -306,8 +337,8 @@ def evaluate(args: Args):
+             if task_name not in log_dict:
+                 log_dict[task_name] = {}
+ 
+-            env_runner = EnvRunner(task_name, video_save_dir, max_steps=args.max_steps)
+-            num_episodes = env_runner.num_episodes
++            env_runner = EnvRunner(task_name, video_save_dir, max_steps=args.max_steps, dataset=args.dataset)
++            num_episodes = min(env_runner.num_episodes, args.episodes or env_runner.num_episodes)
+ 
+             success_flag = "unknown"
+ 
+diff --git a/src/mme_vla_suite/models/integration/history_gemma.py b/src/mme_vla_suite/models/integration/history_gemma.py
+index 781c24a..2210c5b 100644
+--- a/src/mme_vla_suite/models/integration/history_gemma.py
++++ b/src/mme_vla_suite/models/integration/history_gemma.py
+@@ -1,7 +1,10 @@
++import functools
++
+ import einops
+ import flax.linen as nn
+ import jax
+ import jax.numpy as jnp
++import numpy as np
+ 
+ from collections.abc import Sequence
+ from typing import Literal, TypeAlias
+@@ -24,6 +27,13 @@ from mme_vla_suite.models.integration.utils import _name
+ from mme_vla_suite.models.integration.utils import Attention_with_MemoryExpert
+ from mme_vla_suite.models.integration.utils import get_config, Variant
+ 
++MEM_ATTN = []  # robomme-large-attr: (query length, probs [B, S] mean over heads + queries) per MemoryAttention call
++
++
++def _record_mem_attn(query_len, probs_BS):
++    MEM_ATTN.append((query_len, np.asarray(probs_BS)))
++
++
+ @at.typecheck
+ class MemoryRMSNorm(nn.Module):
+     @nn.compact
+@@ -97,6 +107,8 @@ class MemoryAttention(nn.Module):
+         attn_mask = mem_mask[:, None, None, None, :]  # (B, 1, 1, 1, S)
+         masked_logits = jnp.where(attn_mask, logits, -2.3819763e38)
+         probs = jax.nn.softmax(masked_logits, axis=-1).astype(x.dtype)
++        # unordered: ordered effects are not guaranteed inside the layer scan / denoising while_loop
++        jax.debug.callback(functools.partial(_record_mem_attn, x_len), probs.astype(jnp.float32).mean((1, 2, 3)))
+         encoded = jnp.einsum("BKGTS,BSKH->BTKGH", probs, v)
+         encoded = einops.rearrange(encoded, "B T K G H -> B T (K G) H")
+ 
+diff --git a/src/mme_vla_suite/policies/policy.py b/src/mme_vla_suite/policies/policy.py
+index 9d7c430..58f2c56 100644
+--- a/src/mme_vla_suite/policies/policy.py
++++ b/src/mme_vla_suite/policies/policy.py
+@@ -11,6 +11,7 @@ from openpi import transforms as _transforms
+ from openpi.shared import array_typing as at
+ from openpi.shared import nnx_utils
+ 
++from mme_vla_suite.models.integration import history_gemma
+ from mme_vla_suite.models.integration.history_observation import HistAugObservation
+ from mme_vla_suite.models.integration.history_pi0 import HistoryPi0
+ from mme_vla_suite.shared.mem_buffer import MemoryBuffer, MemoryBufferRecurrent
+@@ -88,15 +89,24 @@ class MME_VLA_Policy:
+         self._rng, sample_rng = jax.random.split(self._rng)
+     
+         start_time = time.monotonic()
++        history_gemma.MEM_ATTN.clear()
+         outputs = {
+             "state": observation.state,
+             "actions": self._sample_actions(sample_rng, observation, **self._sample_kwargs),
+         }
++        jax.effects_barrier()  # wait for the MemoryAttention callbacks
+         model_time = time.monotonic() - start_time
+-        outputs = jax.tree.map(lambda x: np.asarray(x[0, ...]), outputs)      
++        outputs = jax.tree.map(lambda x: np.asarray(x[0, ...]), outputs)
+         outputs = self._output_transform(outputs)
+         outputs["infer_time_ms"] = model_time * 1000
+-        
++        # robomme-large-attr: memory frames this call saw (absolute frame indices, right-padded) and their attention
++        if history_gemma.MEM_ATTN:
++            outputs["step_idx"] = np.int64(self.step_idx)
++            outputs["mem_frames"] = np.asarray(self.mem_buffer.get_frame_sampling_indices(
++                self.step_idx, self.config.budget, self.config.token_per_image))
++            outputs["mem_attn"] = np.stack([p[0] for _, p in history_gemma.MEM_ATTN])  # [calls, S]
++            outputs["mem_attn_qlen"] = np.array([q for q, _ in history_gemma.MEM_ATTN])
++
+         return outputs
+     
+     @override
