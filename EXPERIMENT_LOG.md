@@ -78,14 +78,17 @@ PHASES:
 - 2026-11-17 17:32 `robomme-baselines`: given the new benchmark, run meaningful baselines on memory methods for each using the Octo model
     - Baseline runs will include:
         - run standard Octo fine-tuned for 50k steps on the canonical RoboMME/`real-robot` datasets with window 1, 2, and 4 (`robomme-octo-w1`, `robomme-octo-w2`, `robomme-octo-w4`, `robomme-vlacache`)
-        - run a baseline memory / compute method like VLA-Cache, similar 50k fine-tuning steps recipe
+        * run a baseline memory / compute method like VLA-Cache, similar 50k fine-tuning steps recipe
+        - 2026-11-19 11:32 `robomme-p4-fix`: P=20 was too many action steps and was not adequately trained to predict the right noise at high step count k=19, so we reduce to fewer action steps with `robomme-octo-p20-w1-cont` `robomme-octo-p4-w1` `robomme-octo-p4-w2` `robomme-octo-p4-w4` `robomme-vlacache-p4`
 - 2026-11-17 16:54 `train-gan-1-pipeline`: develop basic data pipeline and labelling based on `attn-probe` results and entropy probing to see if we can automatically label and augment for classifier training
-    - Read in dataset from RoboMME
+    - [x]  Read in dataset from RoboMME
     - In a gold, transformer/history-based rollout on baseline models, collect metrics on which frames or patches are more important via attention scores (cross and self), drop in performance if removed across multiple Monte Carlo trials, grad norm at that particular input
+        - 2026-11-21 21:54 `robomme-attr-w4`: determining gradient-based, score-based, and attention score-based attribution across different frames in a multi-frame contextual model as a proof-of-concept for learning contrastively / automatically labelling "important frames"
+        - 2026-11-21 21:54 `robomme-ssl-w4`: taking the last-layer hidden states + gradients per frame and passing them through an encoder to see how the different frames cluster together / if we can learn based on simple InfoNCE/SimCLR-style loss
     - Visually inspect (LLM as a judge) the outputs as a second-layer verification on whether the learned "important" segments are accurate
-    - Run labelling pipeline for all long=context demos
+    - Run labelling pipeline for all long-context demos
     - Augment positive pairs with traditional CV (blurring, colour/saturation shift; NOTE: do NOT modify rotation or perspective especially for wrist and hand cams, as this might change the robot policy's inbuilt biases and mess with the model) + generative techniques and label as fine-tuning input for small diffusion model (more preparation can be done later in phase 2)
-- 2026-11-19 11:32 `robomme-p4-fix`: P=20 was too many action steps and was not adequately trained to predict the right noise at high step count k=19, so we reduce to fewer action steps with `robomme-octo-p20-w1-cont` `robomme-octo-p4-w1` `robomme-octo-p4-w2` `robomme-octo-p4-w4` `robomme-vlacache-p4`
+
 
 # NOTES FROM HT
 **09 Nov**:
