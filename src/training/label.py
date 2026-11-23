@@ -15,14 +15,26 @@ import torch
 from torch.utils.data import DataLoader, Subset
 
 from src.attribution import attention, gradients, learned_mask, loo
+from src.robomme import decode
 from src.training.baseline import to_device
 
-SIGNALS = {  # train.signals -> scorer(policy, batch, train cfg) -> {name: [B, ...]}
-    "attn": lambda p, b, t: attention(p, b),
-    "grad": lambda p, b, t: gradients(p, b, t.n_mc),
-    "loo": lambda p, b, t: loo(p, b, t.n_mc),
-    "mask": lambda p, b, t: learned_mask(p, b, t.mask_lam, t.mask_steps),
+SIGNALS = {  # train.signals -> scorer(policy, batch, train cfg, task mean image) -> {name: [B, ...]}
+    "attn": lambda p, b, t, m: attention(p, b),
+    "grad": lambda p, b, t, m: gradients(p, b, t.n_mc),
+    "loo": lambda p, b, t, m: loo(p, b, t.n_mc, replace={"mask": None, "mean": m, "blur": "blur"}[t.loo_replace]),
+    "mask": lambda p, b, t, m: learned_mask(p, b, t.mask_lam, t.mask_steps),
 }
+
+
+def task_mean_image(path, demos, every=20):
+    """Pixel-wise mean [V, H, W, C] u8 over every `every`-th frame of `demos` in a converted RoboMME task file."""
+    total, n = 0, 0
+    with h5py.File(path) as f:
+        for d in demos:
+            for t in range(0, len(f[d]["front"]), every):
+                total = total + torch.from_numpy(np.stack([decode(f[d][v][t]) for v in ("front", "wrist")])).double()
+                n += 1
+    return (total / n).round().to(torch.uint8)
 
 
 def label(cfg, policy, train_set, test_set, logger, evaluate):
@@ -40,10 +52,11 @@ def label(cfg, policy, train_set, test_set, logger, evaluate):
         with h5py.File(task.path) as f:
             flags = {d: (f[d]["video"][:], f[d]["boundary"][:]) for d in demos}
         idx = [i for i, (d, t, _) in enumerate(task.index) if d in flags and t % spacing == 0]
+        mean_VHWC = task_mean_image(task.path, task.demos) if cfg.train.loo_replace == "mean" else None
         rows = defaultdict(list)
         for batch in DataLoader(Subset(task, idx), cfg.train.batch_size, num_workers=cfg.train.num_workers):
             batch = to_device(batch, cfg.device)
-            scores = {k: v for s in cfg.train.signals for k, v in SIGNALS[s](policy, batch, cfg.train).items()}
+            scores = {k: v for s in cfg.train.signals for k, v in SIGNALS[s](policy, batch, cfg.train, mean_VHWC).items()}
             for k, v in scores.items():
                 rows[k].append(v.float().cpu().numpy().astype(np.float16 if k.endswith("_token") or k.startswith("attn") else np.float32))
         meta = defaultdict(list)

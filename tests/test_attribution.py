@@ -61,6 +61,22 @@ def test_loo_shapes_and_zero_effect_of_identity():
     assert torch.equal(a, policy.denoise_shared(policy.embed_masked(b, None), seed=1))  # shared noise is reproducible
 
 
+def test_loo_replacement_modes():
+    policy, b = OctoPolicy(flip=False).eval(), batch()
+    b["image"][:] = b["image"][:1, :1].clone()  # every sample and slot shows the same frame
+    same = loo(policy, b, n_mc=1, replace=b["image"][0, 0])  # replacing a frame with itself changes nothing
+    assert torch.allclose(same["loo_dact"], torch.zeros(2, 3), atol=1e-5) and same["loo_dloss"].abs().max() < 1e-5
+    blur = loo(policy, b, n_mc=1, replace="blur")
+    assert blur["loo_dact"].shape == (2, 3) and (blur["loo_dact"] > 0).any()
+
+
+def test_task_mean_image(robomme_root):
+    from src.training.label import task_mean_image
+    m_VHWC = task_mean_image(robomme_root / "robomme/BinFill.h5", demos=["episode_0"], every=1)
+    assert m_VHWC.shape == (2, 32, 32, 3) and m_VHWC.dtype == torch.uint8
+    assert abs(int(m_VHWC[1].float().mean()) - 200) <= 2  # wrist pixels are 200 in the fixture
+
+
 def test_learned_mask_in_unit_interval_and_sparsity_pressure():
     policy, b = OctoPolicy(flip=False).eval(), batch()
     weak, strong = (learned_mask(policy, b, lam=lam, steps=15)["mask"] for lam in (0.0, 50.0))

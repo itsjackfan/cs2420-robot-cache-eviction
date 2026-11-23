@@ -7,6 +7,7 @@ Dims: B batch, O window slots, L layers, H heads, R query rows, N tokens, D mode
 patch), G key groups (primary, wrist, lang), T patch tokens per slot (320), F flat action (P * A)."""
 import torch
 from einops import rearrange
+from torchvision.transforms.functional import gaussian_blur
 
 from src.policies.octo import DIFFUSION_STEPS, LANG_TOKENS, MAX_ACTION, VIEWS, encode_language
 
@@ -101,28 +102,42 @@ def noised(policy, batch, n_mc):
     return draws
 
 
+def blurred(image_BVHWC, sigma=12.0):
+    """Gaussian blur (kernel 4 sigma + 1, as IMPACT-VLA's blur kernel) of u8 images [..., H, W, C]."""
+    x = rearrange(image_BVHWC, "... h w c -> (...) c h w").float()
+    k = int(4 * sigma) | 1
+    y = gaussian_blur(x, [k, k], [sigma, sigma]).round().clamp(0, 255).to(torch.uint8)
+    return rearrange(y, "(n) c h w -> n h w c").reshape(image_BVHWC.shape)
+
+
 @torch.no_grad()
-def loo(policy, batch, n_mc):
-    """Leave-one-frame-out: evict each slot's patch tokens as attention keys; vs the unmasked pass with shared noise:
-    loo_dloss [B, O] (denoising-loss change on the demo action), loo_deps [B, O] (RMS change of predicted noise),
-    loo_dact [B, O] (mean |change| of the sampled normalized action chunk, shared sampling noise); loo_rand_* [B] for a
-    size-matched random token set (control)."""
+def loo(policy, batch, n_mc, replace=None):
+    """Leave-one-frame-out, slot by slot, vs the unmodified pass with shared noise: replace None evicts the slot's patch
+    tokens as attention keys; replace [V, H, W, C] u8 (e.g. the task mean image) or "blur" replaces the slot's pixels
+    instead. -> loo_dloss [B, O] (denoising-loss change on the demo action), loo_deps [B, O] (RMS change of predicted
+    noise), loo_dact [B, O] (mean |change| of the sampled normalized action chunk, shared sampling noise); loo_rand_* [B]
+    for a size-matched random token set evicted as keys (control, in every mode)."""
     O, B = batch["image"].shape[1], batch["image"].shape[0]
     N = slot_tokens(O)["readout"][-1].item() + 1
     evict_EN = frame_bias(O, N, B, batch["image"].device)
     draws, h = noised(policy, batch, n_mc), policy.head
 
-    def run(bias_BN):
-        emb_BD = policy.embed_masked(batch, bias_BN)
+    def run(bias_BN, b=batch):
+        emb_BD = policy.embed_masked(b, bias_BN)
         eps_hats = [h(emb_BD, noisy, k) for k, _, noisy in draws]
         loss_B = torch.stack([(e - eps).pow(2).mean(-1) for e, (_, eps, _) in zip(eps_hats, draws)]).mean(0)
         return loss_B, torch.stack(eps_hats), policy.denoise_shared(emb_BD, seed=0)
+
+    def replaced(o):
+        image = batch["image"].clone()
+        image[:, o] = blurred(image[:, o]) if isinstance(replace, str) else replace.to(image.device)
+        return {**batch, "image": image}
 
     loss0, eps0, act0 = run(None)
     out = {"loo_dloss": [], "loo_deps": [], "loo_dact": []}
     for e in range(O + 1):
         bias_BN = torch.zeros(B, N, device=evict_EN.device).masked_fill(evict_EN[e], float("-inf"))
-        loss, eps, act = run(bias_BN)
+        loss, eps, act = run(bias_BN) if replace is None or e == O else run(None, replaced(e))
         out["loo_dloss"].append(loss - loss0)
         out["loo_deps"].append((eps - eps0).pow(2).mean((0, -1)).sqrt())
         out["loo_dact"].append((act - act0).abs().mean(-1))
