@@ -195,3 +195,15 @@ index 9d7c430..58f2c56 100644
          return outputs
      
      @override
+diff --git a/src/mme_vla_suite/serving/websocket_policy_server.py b/src/mme_vla_suite/serving/websocket_policy_server.py
+index a1ac4f5..c4ec675 100644
+--- a/src/mme_vla_suite/serving/websocket_policy_server.py
++++ b/src/mme_vla_suite/serving/websocket_policy_server.py
+@@ -42,6 +42,7 @@ class WebsocketPolicyServer:
+             self._port,
+             compression=None,
+             max_size=None,
++            ping_interval=None,  # robomme-large-attr: blocking JAX calls (first compiles) starve keepalive pings
+             process_request=_health_check,
+         ) as server:
+             await server.serve_forever()
