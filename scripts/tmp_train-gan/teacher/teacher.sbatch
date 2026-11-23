@@ -11,6 +11,8 @@
 #SBATCH --mem=64G
 #SBATCH --time=12:00:00
 set -euo pipefail
+# copies of this job on other partitions share its name (queue_full.sh): the first to start cancels the rest
+scancel --state=PENDING --name="$SLURM_JOB_NAME" --user="$USER"
 cd "$SLURM_SUBMIT_DIR"
 set -a; source .env; set +a
 T=$RCE_OUT_ROOT/teacher
