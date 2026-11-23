@@ -84,7 +84,9 @@ PHASES:
     - [x]  Read in dataset from RoboMME
     - In a gold, transformer/history-based rollout on baseline models, collect metrics on which frames or patches are more important via attention scores (cross and self), drop in performance if removed across multiple Monte Carlo trials, grad norm at that particular input
         - 2026-11-21 21:54 `robomme-attr-w4`: determining gradient-based, score-based, and attention score-based attribution across different frames in a multi-frame contextual model as a proof-of-concept for learning contrastively / automatically labelling "important frames"
-        - 2026-11-21 21:54 `robomme-ssl-w4`: taking the last-layer hidden states + gradients per frame and passing them through an encoder to see how the different frames cluster together / if we can learn based on simple InfoNCE/SimCLR-style loss
+            Results: NO significant attribution signal apart from order in the context (frames closer to the context are always significantly higher), low-context window as well
+        - REJECTED 2026-11-21 21:54 `robomme-ssl-w4`: taking the last-layer hidden states + gradients per frame and passing them through an encoder to see how the different frames cluster together / if we can learn based on simple InfoNCE/SimCLR-style loss
+        - 2026-11-22 13:25 `robomme-large-attr`: swap in a large teacher model that has already been trained on RoboMME and use its successful rollouts to attribue attention and grad scores across frames 
     - Visually inspect (LLM as a judge) the outputs as a second-layer verification on whether the learned "important" segments are accurate
     - Run labelling pipeline for all long-context demos
     - Augment positive pairs with traditional CV (blurring, colour/saturation shift; NOTE: do NOT modify rotation or perspective especially for wrist and hand cams, as this might change the robot policy's inbuilt biases and mess with the model) + generative techniques and label as fine-tuning input for small diffusion model (more preparation can be done later in phase 2)
