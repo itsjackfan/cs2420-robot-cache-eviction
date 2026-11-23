@@ -52,7 +52,7 @@ def label(cfg, policy, train_set, test_set, logger, evaluate):
         with h5py.File(task.path) as f:
             flags = {d: (f[d]["video"][:], f[d]["boundary"][:]) for d in demos}
         idx = [i for i, (d, t, _) in enumerate(task.index) if d in flags and t % spacing == 0]
-        mean_VHWC = task_mean_image(task.path, task.demos) if cfg.train.loo_replace == "mean" else None
+        mean_VHWC = task_mean_image(task.path, task.demos) if "loo" in cfg.train.signals and cfg.train.loo_replace == "mean" else None
         rows = defaultdict(list)
         for batch in DataLoader(Subset(task, idx), cfg.train.batch_size, num_workers=cfg.train.num_workers):
             batch = to_device(batch, cfg.device)
