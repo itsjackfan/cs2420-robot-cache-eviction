@@ -76,3 +76,78 @@ def gradients(policy, batch, n_mc):
     idx = slot_tokens(O)
     patch_OT = torch.cat([idx["primary"], idx["wrist"]], 1).to(x_BND.device)
     return {"grad_token": grad_BN.detach()[:, patch_OT], "score_token": score_BN.detach()[:, patch_OT], "loss": loss_B}
+
+
+def frame_bias(O, N, B, device):
+    """-> evict_ON [O + 1, N] bool: row o evicts slot o's patch tokens as keys; last row evicts a size-matched random
+    set of patch tokens spread over all slots (control). One fixed random set per call (seeded)."""
+    patch_OT = torch.cat([slot_tokens(O)["primary"], slot_tokens(O)["wrist"]], 1)
+    evict = torch.zeros(O + 1, N, dtype=torch.bool)
+    evict[torch.arange(O)[:, None], patch_OT] = True
+    rand_T = patch_OT.flatten()[torch.randperm(patch_OT.numel(), generator=torch.Generator().manual_seed(0))[:patch_OT.shape[1]]]
+    evict[O, rand_T] = True
+    return evict.to(device)
+
+
+def noised(policy, batch, n_mc):
+    """n_mc fixed (k, eps, noisy) draws on the demo action chunk -> [(k_B1, eps_BF, noisy_BF)]."""
+    x0_BF = rearrange(policy.to_model(batch["action"]), "b p a -> b (p a)").clamp(-MAX_ACTION, MAX_ACTION)
+    draws = []
+    for _ in range(n_mc):
+        k_B1 = torch.randint(0, DIFFUSION_STEPS, (len(x0_BF), 1), device=x0_BF.device)
+        eps_BF = torch.randn_like(x0_BF)
+        a_B1 = policy.head.alpha_hats_K[k_B1]
+        draws.append((k_B1, eps_BF, a_B1.sqrt() * x0_BF + (1 - a_B1).sqrt() * eps_BF))
+    return draws
+
+
+@torch.no_grad()
+def loo(policy, batch, n_mc):
+    """Leave-one-frame-out: evict each slot's patch tokens as attention keys; vs the unmasked pass with shared noise:
+    loo_dloss [B, O] (denoising-loss change on the demo action), loo_deps [B, O] (RMS change of predicted noise),
+    loo_dact [B, O] (mean |change| of the sampled normalized action chunk, shared sampling noise); loo_rand_* [B] for a
+    size-matched random token set (control)."""
+    O, B = batch["image"].shape[1], batch["image"].shape[0]
+    N = slot_tokens(O)["readout"][-1].item() + 1
+    evict_EN = frame_bias(O, N, B, batch["image"].device)
+    draws, h = noised(policy, batch, n_mc), policy.head
+
+    def run(bias_BN):
+        emb_BD = policy.embed_masked(batch, bias_BN)
+        eps_hats = [h(emb_BD, noisy, k) for k, _, noisy in draws]
+        loss_B = torch.stack([(e - eps).pow(2).mean(-1) for e, (_, eps, _) in zip(eps_hats, draws)]).mean(0)
+        return loss_B, torch.stack(eps_hats), policy.denoise_shared(emb_BD, seed=0)
+
+    loss0, eps0, act0 = run(None)
+    out = {"loo_dloss": [], "loo_deps": [], "loo_dact": []}
+    for e in range(O + 1):
+        bias_BN = torch.zeros(B, N, device=evict_EN.device).masked_fill(evict_EN[e], float("-inf"))
+        loss, eps, act = run(bias_BN)
+        out["loo_dloss"].append(loss - loss0)
+        out["loo_deps"].append((eps - eps0).pow(2).mean((0, -1)).sqrt())
+        out["loo_dact"].append((act - act0).abs().mean(-1))
+    out = {k: torch.stack(v, 1) for k, v in out.items()}  # [B, O + 1]
+    return {**{k: v[:, :O] for k, v in out.items()}, "loo_rand_dloss": out["loo_dloss"][:, O],
+            "loo_rand_deps": out["loo_deps"][:, O], "loo_rand_dact": out["loo_dact"][:, O]}
+
+
+def learned_mask(policy, batch, lam, steps, n_mc=2, lr=0.1):
+    """Per-sample keep-weights m [B, O] in (0, 1) on each slot's patch keys (log m added to their attention logits),
+    optimized to keep the predicted noise of n_mc fixed draws while lam * mean(m) pushes weights down. -> mask [B, O]."""
+    O, B = batch["image"].shape[1], batch["image"].shape[0]
+    N = slot_tokens(O)["readout"][-1].item() + 1
+    member_ON = frame_bias(O, N, B, batch["image"].device)[:O].float()
+    draws, h = noised(policy, batch, n_mc), policy.head
+    with torch.no_grad():
+        emb0 = policy.embed_masked(batch, None)
+        target = torch.stack([h(emb0, noisy, k) for k, _, noisy in draws])
+    logit_BO = torch.full((B, O), 3.0, device=member_ON.device, requires_grad=True)  # m = 0.95
+    opt = torch.optim.Adam([logit_BO], lr=lr)
+    for _ in range(steps):
+        m_BO = logit_BO.sigmoid()
+        bias_BN = torch.einsum("bo,on->bn", torch.log(m_BO), member_ON)
+        emb = policy.embed_masked(batch, bias_BN)
+        pred = torch.stack([h(emb, noisy, k) for k, _, noisy in draws])
+        loss = (pred - target).pow(2).mean() + lam * m_BO.mean()
+        opt.zero_grad(), loss.backward(), opt.step()
+    return {"mask": logit_BO.detach().sigmoid()}

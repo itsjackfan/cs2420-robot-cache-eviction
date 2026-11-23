@@ -7,7 +7,7 @@ import pytest
 import torch
 from omegaconf import open_dict
 
-from src.attribution import attention, gradients
+from src.attribution import attention, gradients, learned_mask, loo
 from src.config import compose
 from src.data import build_datasets
 from src.policies.octo import OctoPolicy
@@ -17,7 +17,9 @@ from tests.test_robomme import VIDEO, rcfg, robomme_root  # noqa: F401 (fixtures
 
 @pytest.fixture(autouse=True)
 def fake_t5(monkeypatch):
-    monkeypatch.setattr("src.attribution.encode_language", lambda texts, device: torch.zeros(len(texts), 16, 768, device=device))
+    fake = lambda texts, device: torch.zeros(len(texts), 16, 768, device=device)
+    monkeypatch.setattr("src.attribution.encode_language", fake)
+    monkeypatch.setattr("src.policies.octo.encode_language", fake)
 
 
 def batch(B=2, O=3):
@@ -45,6 +47,36 @@ def test_gradients_per_sample_and_shapes():
     torch.manual_seed(0)
     g2 = gradients(policy, b, n_mc=2)
     assert torch.allclose(g["grad_token"][0], g2["grad_token"][0], rtol=1e-4) and not torch.allclose(g["grad_token"][1], g2["grad_token"][1])
+
+
+def test_loo_shapes_and_zero_effect_of_identity():
+    policy, b = OctoPolicy(flip=False).eval(), batch()
+    out = loo(policy, b, n_mc=2)
+    for k in ("loo_dloss", "loo_deps", "loo_dact"):
+        assert out[k].shape == (2, 3) and torch.isfinite(out[k]).all()
+    assert out["loo_rand_dact"].shape == out["loo_rand_deps"].shape == (2,)
+    assert (out["loo_deps"] >= 0).all() and (out["loo_dact"] >= 0).all()
+    torch.manual_seed(0)
+    a = policy.denoise_shared(policy.embed_masked(b, None), seed=1)
+    assert torch.equal(a, policy.denoise_shared(policy.embed_masked(b, None), seed=1))  # shared noise is reproducible
+
+
+def test_learned_mask_in_unit_interval_and_sparsity_pressure():
+    policy, b = OctoPolicy(flip=False).eval(), batch()
+    weak, strong = (learned_mask(policy, b, lam=lam, steps=15)["mask"] for lam in (0.0, 50.0))
+    assert weak.shape == strong.shape == (2, 3) and ((weak > 0) & (weak < 1)).all()
+    assert strong.mean() < weak.mean()
+
+
+def test_label_loop_selects_signals(rcfg, robomme_root):
+    with open_dict(rcfg):
+        rcfg.train = compose(["train=label", "train.demos_per_task=1", "train.n_mc=1", "train.batch_size=4",
+                              "train.num_workers=0", "train.signals=[loo,mask]", "train.mask_steps=2"]).train
+    train, test = build_datasets(rcfg, robomme_root)
+    label(rcfg, OctoPolicy(flip=False), train, test, None, None)
+    f = np.load(Path(rcfg.run_dir) / "labels/BinFill.npz")
+    assert {"loo_dloss", "loo_deps", "loo_dact", "loo_rand_dact", "mask", "frame"} <= set(f.files)
+    assert "attn_mass" not in f.files and f["mask"].shape == f["loo_dact"].shape == (4, 3)
 
 
 def test_label_loop_writes_per_slot_scores_and_resumes(rcfg, robomme_root):

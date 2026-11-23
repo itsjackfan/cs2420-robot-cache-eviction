@@ -364,6 +364,22 @@ class OctoPolicy(Policy):
         return self.from_model(rearrange(self.denoise(emb_BD), "b (p a) -> b p a", p=self.P))
 
     @torch.no_grad()
+    def denoise_shared(self, emb_BD, seed):
+        """denoise() with all sampling noise drawn from `seed`, so masked and unmasked passes share it."""
+        with torch.random.fork_rng(devices=[emb_BD.device] if emb_BD.is_cuda else []):
+            torch.manual_seed(seed)
+            return self.denoise(emb_BD)
+
+    def embed_masked(self, obs, bias_BN):
+        """Last-step readout embedding [B, D] with an additive attention-logit bias on keys (bias_BN [B, N]; 0 = keep,
+        -inf = evict as key only; positions untouched). None -> plain embed."""
+        x_BND, allow_NN = self.tokenize(self.views(obs), encode_language(obs["lang"], obs["image"].device))
+        mask = torch.zeros(allow_NN.shape, device=x_BND.device).masked_fill(~allow_NN, float("-inf"))
+        if bias_BN is not None:  # per-sample mask -> [B * heads, N, N]
+            mask = (mask[None] + bias_BN[:, None, :]).repeat_interleave(self.transformer.layers[0].self_attn.num_heads, 0)
+        return self.readout(self.transformer(x_BND, mask=mask), obs["image"].shape[1])[:, -1]
+
+    @torch.no_grad()
     def denoise(self, emb_BD):
         """DDPM reverse process -> normalized flat action chunk [B, F]."""
         x_BF = torch.randn(emb_BD.shape[0], self.P * 7, device=emb_BD.device)

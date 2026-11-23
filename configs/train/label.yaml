@@ -7,4 +7,7 @@ loop: src.training.label.label
 epochs: 0
 batch_size: 16
 demos_per_task: 20   # first demos of each task's train split
-n_mc: 4              # draws of (noise step k, noise, projection v) for grad_token / score_token
+n_mc: 4              # draws of (noise step k, noise, projection v) for grad / loo scores
+signals: [attn, grad]  # scorers (src/training/label.py:SIGNALS): attn, grad, loo, mask
+mask_lam: 0.05       # learned mask: sparsity weight on mean keep-weight
+mask_steps: 50       # learned mask: Adam steps per batch

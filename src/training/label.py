@@ -3,7 +3,8 @@ execution steps t % min(obs_stride, n_action_steps) == 0 of the first train.demo
 and save run_dir/labels/<task>.npz. Resumable per task. Arrays (W windows, O slots, slot O-1 = current frame):
 attn_mass [W, L, Q, O, G], attn_task [W, L, Q], attn_token / grad_token / score_token [W, O, T] (float16), loss [W],
 frame [W, O] (absolute frame index in the episode, incl. conditioning video), video / boundary [W, O] (flags of those
-frames), demo [W] (episode index), step [W] (t)."""
+frames), demo [W] (episode index), step [W] (t). Which scores are written: train.signals (SIGNALS below); loo adds
+loo_dloss / loo_deps / loo_dact [W, O] + loo_rand_* [W], mask adds mask [W, O] (float32)."""
 from collections import defaultdict
 from pathlib import Path
 import time
@@ -13,8 +14,15 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, Subset
 
-from src.attribution import attention, gradients
+from src.attribution import attention, gradients, learned_mask, loo
 from src.training.baseline import to_device
+
+SIGNALS = {  # train.signals -> scorer(policy, batch, train cfg) -> {name: [B, ...]}
+    "attn": lambda p, b, t: attention(p, b),
+    "grad": lambda p, b, t: gradients(p, b, t.n_mc),
+    "loo": lambda p, b, t: loo(p, b, t.n_mc),
+    "mask": lambda p, b, t: learned_mask(p, b, t.mask_lam, t.mask_steps),
+}
 
 
 def label(cfg, policy, train_set, test_set, logger, evaluate):
@@ -35,9 +43,9 @@ def label(cfg, policy, train_set, test_set, logger, evaluate):
         rows = defaultdict(list)
         for batch in DataLoader(Subset(task, idx), cfg.train.batch_size, num_workers=cfg.train.num_workers):
             batch = to_device(batch, cfg.device)
-            scores = {**attention(policy, batch), **gradients(policy, batch, cfg.train.n_mc)}
+            scores = {k: v for s in cfg.train.signals for k, v in SIGNALS[s](policy, batch, cfg.train).items()}
             for k, v in scores.items():
-                rows[k].append(v.float().cpu().numpy().astype(np.float32 if k == "loss" else np.float16))
+                rows[k].append(v.float().cpu().numpy().astype(np.float16 if k.endswith("_token") or k.startswith("attn") else np.float32))
         meta = defaultdict(list)
         for i in idx:
             d, t, _ = task.index[i]
