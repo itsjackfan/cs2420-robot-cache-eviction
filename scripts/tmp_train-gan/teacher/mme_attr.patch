@@ -186,7 +186,7 @@ index 781c24a..9bd4bbc 100644
          encoded = einops.rearrange(encoded, "B T K G H -> B T (K G) H")
  
 diff --git a/src/mme_vla_suite/policies/policy.py b/src/mme_vla_suite/policies/policy.py
-index 9d7c430..8860acf 100644
+index 9d7c430..3e561ed 100644
 --- a/src/mme_vla_suite/policies/policy.py
 +++ b/src/mme_vla_suite/policies/policy.py
 @@ -11,10 +11,13 @@ from openpi import transforms as _transforms
@@ -203,7 +203,7 @@ index 9d7c430..8860acf 100644
  class MME_VLA_Policy:
      def __init__(
          self,
-@@ -81,30 +84,92 @@ class MME_VLA_Policy:
+@@ -81,30 +84,93 @@ class MME_VLA_Policy:
                                          
          inputs = jax.tree.map(lambda x: x, obs)
          inputs = self._prepare_history(inputs)
@@ -247,8 +247,9 @@ index 9d7c430..8860acf 100644
 +            F, -1, self.config.memory_feature.img.input_dim).mean(1)
 +        out = {
 +            "step_idx": np.int64(self.step_idx),
-+            "mem_frames": np.asarray(self.mem_buffer.get_frame_sampling_indices(
-+                self.step_idx, self.config.budget, self.config.token_per_image)),
++            "mem_frames": np.pad(frames := np.asarray(self.mem_buffer.get_frame_sampling_indices(
++                self.step_idx, self.config.budget, self.config.token_per_image)), (0, F - len(frames)),
++                constant_values=-1),  # short history (no video): fewer than F sampled frames, right-padded like memory
 +            "mem_valid": valid_F,
 +            "mem_attn": mem_attn_MS,
 +            "mem_attn_qlen": np.array([q for q, _ in history_gemma.MEM_ATTN]),
