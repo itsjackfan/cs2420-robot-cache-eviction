@@ -95,6 +95,7 @@ PHASES:
             - 2026-11-22 22:43 `frame-importance-loo-mean`: mean-based loo-style outputs per frame; track output difference on each frame to for causality
             - 2026-11-22 22:43 `frame-importance-loo-blur`: blur-based loo-style outputs per frame; track output difference on each frame to for causality
             - 2026-11-23 04:51 `frame-importance-teacher-banzhaf`: more robust Banzhaf/random subset of counterfactuals sampling
+            - 2026-11-23 11:02 `teacher-evict-top4` `teacher-evict-rand4`: an ablation to test whether the top 4 memory attention action change will actually be correlated to task success; if this works, also ablate if we can change the k of the top-k group
     - Visually inspect (LLM as a judge) the outputs as a second-layer verification on whether the learned "important" segments are accurate
     - Run labelling pipeline for all long-context demos
     - Augment positive pairs with traditional CV (blurring, colour/saturation shift; NOTE: do NOT modify rotation or perspective especially for wrist and hand cams, as this might change the robot policy's inbuilt biases and mess with the model) + generative techniques and label as fine-tuning input for small diffusion model (more preparation can be done later in phase 2)
