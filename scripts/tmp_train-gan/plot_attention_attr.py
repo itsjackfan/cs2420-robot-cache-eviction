@@ -1,6 +1,7 @@
 """Midpoint figure: MME-VLA teacher memory attention as a frame-importance signal (robomme-large-attr rollouts).
 (a) action change when the 4 most-attended vs 4 random memory frames are masked; (b) attention weight and (c) single-
-frame leave-one-out action change by memory slot (oldest .. newest), calls with a full 32-frame memory only.
+frame leave-one-out action change by memory slot (oldest .. newest), calls with a full 32-frame memory only;
+(d) Banzhaf value by slot if <out dir>/banzhaf.npz exists (analyze_banzhaf.py, frame-importance-teacher-banzhaf).
 Dims: C policy calls, F memory frames (32), M MemoryAttention passes.
 Usage: python plot_attention_attr.py <rollouts dir> <out dir>."""
 from pathlib import Path
@@ -11,7 +12,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-BLUE, ORANGE, INK, INK2, GRID = "#2a78d6", "#eb6834", "#0b0b0b", "#52514e", "#e4e3df"
+BLUE, ORANGE, GREEN, INK, INK2, GRID = "#2a78d6", "#eb6834", "#1baf7a", "#0b0b0b", "#52514e", "#e4e3df"
 
 
 def boot_ci(x, n=2000, seed=0):
@@ -43,7 +44,10 @@ def main(rollouts, out):
              loo_slot=np.nanmean(loo_CF, 0))
     plt.rcParams.update({"font.size": 10, "text.color": INK, "axes.labelcolor": INK, "xtick.color": INK2,
                          "ytick.color": INK2, "axes.edgecolor": INK2})
-    fig, (a, b, c) = plt.subplots(1, 3, figsize=(13, 3.6), gridspec_kw={"width_ratios": [1, 1.6, 1.6]})
+    bz = np.load(out / "banzhaf.npz") if (out / "banzhaf.npz").exists() else None  # analyze_banzhaf.py
+    fig, axes = plt.subplots(1, 4 if bz else 3, figsize=(17.5 if bz else 13, 3.6),
+                             gridspec_kw={"width_ratios": [1, 1.6, 1.6, 1.6][:4 if bz else 3]})
+    a, b, c = axes[:3]
 
     stats = [boot_ci(top[checked]), boot_ci(rand[checked])]
     a.bar([0, 1], [s[0] for s in stats], width=0.6, color=[BLUE, ORANGE], edgecolor="white", linewidth=2,
@@ -65,7 +69,14 @@ def main(rollouts, out):
         ax.set_ylabel(label), ax.set_title(title, fontsize=10)
     b.axhline(1, color=INK2, lw=1, ls="--")
     b.text(31, 1.02, "uniform", ha="right", va="bottom", color=INK2, fontsize=8)
-    for ax in (a, b, c):
+    if bz:
+        d = axes[3]
+        d.fill_between(x, bz["slot_q25"], bz["slot_q75"], color=GREEN, alpha=0.15, lw=0)
+        d.plot(x, bz["slot_value"], color=GREEN, lw=2, marker="o", ms=4)
+        d.axhline(0, color=INK2, lw=1, ls="--")
+        d.set_xlabel("memory slot (0 = oldest sampled frame, 31 = newest)")
+        d.set_ylabel("Banzhaf value (action change)"), d.set_title("(d) Banzhaf value by slot (random keep-sets)", fontsize=10)
+    for ax in axes:
         ax.grid(axis="y", color=GRID, lw=0.8), ax.spines[["top", "right"]].set_visible(False)
     fig.tight_layout()
     fig.savefig(out / "attention_attr.png", dpi=200)
