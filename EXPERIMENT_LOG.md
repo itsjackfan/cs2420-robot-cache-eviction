@@ -86,11 +86,12 @@ PHASES:
         - 2026-11-21 21:54 `robomme-attr-w4`: determining gradient-based, score-based, and attention score-based attribution across different frames in a multi-frame contextual model as a proof-of-concept for learning contrastively / automatically labelling "important frames"
             Results: NO significant attribution signal apart from order in the context (frames closer to the context are always significantly higher), low-context window as well
         - REJECTED 2026-11-21 21:54 `robomme-ssl-w4`: taking the last-layer hidden states + gradients per frame and passing them through an encoder to see how the different frames cluster together / if we can learn based on simple InfoNCE/SimCLR-style loss
-        - 2026-11-22 13:25 `robomme-large-attr`: swap in a large teacher model that has already been trained on RoboMME and use its successful rollouts to attribue attention and grad scores across frames 
+        - 2026-11-22 13:25 `robomme-large-attr`: swap in a large teacher model that has already been trained on RoboMME and use its successful rollouts to attribute attention ~~and grad scores~~ across frames 
+            - 2026-11-22 22:28 `large-attr-margin`: ablate to check rollouts on continuity metrics: attn score deficit and cos similarity between two consecutive frames in the context at one point in the rollout
     - Visually inspect (LLM as a judge) the outputs as a second-layer verification on whether the learned "important" segments are accurate
     - Run labelling pipeline for all long-context demos
     - Augment positive pairs with traditional CV (blurring, colour/saturation shift; NOTE: do NOT modify rotation or perspective especially for wrist and hand cams, as this might change the robot policy's inbuilt biases and mess with the model) + generative techniques and label as fine-tuning input for small diffusion model (more preparation can be done later in phase 2)
-
+- 2026-11-22 22:23 `spr`: in accordance with the SPR paper, train an image encoder to contrastively learn and encode the potential next states, only with an adjusted loss that shapes to frame importance / permanence
 
 # NOTES FROM HT
 **09 Nov**:

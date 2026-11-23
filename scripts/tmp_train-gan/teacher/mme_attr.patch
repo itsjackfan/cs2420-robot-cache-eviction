@@ -21,7 +21,7 @@ index 9edff59..b8bd237 100644
              gui_render=False,
              max_steps=max_steps,
 diff --git a/examples/robomme/eval.py b/examples/robomme/eval.py
-index 245f305..4a6dab9 100644
+index 245f305..aeb16c1 100644
 --- a/examples/robomme/eval.py
 +++ b/examples/robomme/eval.py
 @@ -39,6 +39,10 @@ class Args:
@@ -46,7 +46,7 @@ index 245f305..4a6dab9 100644
          subgoal_predictor.start_episode(epstate, env_runner)        
  
          img, wrist_img, robot_state = epstate.get_current_obs()
-@@ -109,10 +117,12 @@ class EpisodeEvaluator:
+@@ -109,10 +117,11 @@ class EpisodeEvaluator:
                  if has_api_error:
                      break
  
@@ -56,12 +56,11 @@ index 245f305..4a6dab9 100644
 +                    client, epstate, img, wrist_img, robot_state, prompt, subgoal,
                      exec_horizon=self.args.obs_horizon
                  )
-+                attr["calls"].append({k: resp[k] for k in ("step_idx", "mem_frames", "mem_attn", "mem_attn_qlen")
-+                                      if k in resp})
++                attr["calls"].append({k: resp[k] for k in ATTR_KEYS if k in resp})
  
                  epstate.action_plan.extend(action_chunk)
                  epstate.clear_buffers()
-@@ -129,6 +139,8 @@ class EpisodeEvaluator:
+@@ -129,6 +138,8 @@ class EpisodeEvaluator:
  
              img, wrist_img, robot_state = obs
  
@@ -70,7 +69,7 @@ index 245f305..4a6dab9 100644
              epstate.add_observation(img, wrist_img, robot_state)
              recorder.record(
                  image=img.copy(),
-@@ -144,6 +156,10 @@ class EpisodeEvaluator:
+@@ -144,6 +155,10 @@ class EpisodeEvaluator:
          if success_flag == "unknown":
              return "unknown"
  
@@ -81,7 +80,7 @@ index 245f305..4a6dab9 100644
          video_filename = f"{env_runner.env_id}_ep{env_runner.episode_id}_{success_flag}_{task_goal}_{env_runner.difficulty}.mp4"
          recorder.save_video(video_filename)
  
-@@ -212,8 +228,23 @@ class EpisodeEvaluator:
+@@ -212,8 +227,30 @@ class EpisodeEvaluator:
              element['simple_subgoal'] = subgoal
              element['grounded_subgoal'] = subgoal
  
@@ -91,11 +90,18 @@ index 245f305..4a6dab9 100644
 +        return resp["actions"][:exec_horizon], resp
 +
 +
++ATTR_KEYS = ("step_idx", "mem_frames", "mem_valid", "mem_attn", "mem_attn_qlen", "cos_siglip", "cos_memtok",
++             "causal_top", "causal_rand", "causal_top_frames", "causal_rand_frames")
++
++
 +def save_attr(path: Path, attr: dict, outcome: str, task_goal: str) -> None:
 +    """robomme-large-attr: one rollout -> npz. front / wrist [F] JPEG (q95) bytes, state [F, 8], action [F-1-exec_start, 8]
 +    (joint space), exec_start_idx (frames before it are the conditioning video), and per policy call: step_idx [C]
-+    (current frame), mem_frames [C, 32] (sampled frame indices), mem_attn [C, M, 512] (MemoryAttention probs per call,
-+    UNORDERED across layers / denoising steps, mean over heads + query tokens), mem_attn_qlen [C, M] (query length of each MemoryAttention call)."""
++    (current frame), mem_frames [C, 32] (sampled frame indices, right-padded), mem_valid [C, 32], mem_attn [C, M, 512]
++    (MemoryAttention probs per call, UNORDERED across layers / denoising steps, mean over heads + query tokens),
++    mem_attn_qlen [C, M], cos_siglip / cos_memtok [C, 31] (adjacent memory frames: SigLIP embedding / memory-encoder
++    output cosine), causal_top / causal_rand [C] (mean |delta action|, normalized, masking the top-4 attended / 4 random
++    frames; NaN on unchecked calls), causal_top_frames / causal_rand_frames [C, 4] (slot indices; -1 if unchecked)."""
 +    import cv2
 +    path.parent.mkdir(parents=True, exist_ok=True)
 +    jpeg = lambda frames: np.array([cv2.imencode(".jpg", f[..., ::-1], [cv2.IMWRITE_JPEG_QUALITY, 95])[1] for f in frames],
@@ -107,7 +113,7 @@ index 245f305..4a6dab9 100644
  
  
  def setup_save_directory(args: Args) -> Path:
-@@ -306,8 +337,8 @@ def evaluate(args: Args):
+@@ -306,8 +343,8 @@ def evaluate(args: Args):
              if task_name not in log_dict:
                  log_dict[task_name] = {}
  
@@ -119,7 +125,7 @@ index 245f305..4a6dab9 100644
              success_flag = "unknown"
  
 diff --git a/src/mme_vla_suite/models/integration/history_gemma.py b/src/mme_vla_suite/models/integration/history_gemma.py
-index 781c24a..2210c5b 100644
+index 781c24a..a964565 100644
 --- a/src/mme_vla_suite/models/integration/history_gemma.py
 +++ b/src/mme_vla_suite/models/integration/history_gemma.py
 @@ -1,7 +1,10 @@
@@ -133,21 +139,39 @@ index 781c24a..2210c5b 100644
  
  from collections.abc import Sequence
  from typing import Literal, TypeAlias
-@@ -24,6 +27,13 @@ from mme_vla_suite.models.integration.utils import _name
+@@ -24,6 +27,20 @@ from mme_vla_suite.models.integration.utils import _name
  from mme_vla_suite.models.integration.utils import Attention_with_MemoryExpert
  from mme_vla_suite.models.integration.utils import get_config, Variant
  
 +MEM_ATTN = []  # robomme-large-attr: (query length, probs [B, S] mean over heads + queries) per MemoryAttention call
++MEM_TOK = []  # robomme-large-attr: memory-encoder output tokens, frame mean [B, S / 16, D] (identical across calls)
++TOKENS_PER_FRAME = 16  # perceptual-framesamp-modul: token_per_image
 +
 +
 +def _record_mem_attn(query_len, probs_BS):
 +    MEM_ATTN.append((query_len, np.asarray(probs_BS)))
 +
 +
++def _record_mem_tok(tok_BFD):
++    if not MEM_TOK:
++        MEM_TOK.append(np.asarray(tok_BFD))
++
++
  @at.typecheck
  class MemoryRMSNorm(nn.Module):
      @nn.compact
-@@ -97,6 +107,8 @@ class MemoryAttention(nn.Module):
+@@ -77,7 +94,9 @@ class MemoryAttention(nn.Module):
+         rms_norm = MemoryRMSNorm(name="mem_rms_norm")
+         x = rms_norm(x)
+         q = q_einsum("BTD,NDH->BTNH", x)
+-        
++        jax.debug.callback(_record_mem_tok, einops.reduce(
++            mem_seq.astype(jnp.float32), "b (f t) d -> b f d", "mean", t=TOKENS_PER_FRAME))
++
+         mem_seq = rms_norm(mem_seq)
+         k, v = kv_einsum("BSD,2KDH->2BSKH", mem_seq)
+         
+@@ -97,6 +116,8 @@ class MemoryAttention(nn.Module):
          attn_mask = mem_mask[:, None, None, None, :]  # (B, 1, 1, 1, S)
          masked_logits = jnp.where(attn_mask, logits, -2.3819763e38)
          probs = jax.nn.softmax(masked_logits, axis=-1).astype(x.dtype)
@@ -157,10 +181,10 @@ index 781c24a..2210c5b 100644
          encoded = einops.rearrange(encoded, "B T K G H -> B T (K G) H")
  
 diff --git a/src/mme_vla_suite/policies/policy.py b/src/mme_vla_suite/policies/policy.py
-index 9d7c430..58f2c56 100644
+index 9d7c430..da284c1 100644
 --- a/src/mme_vla_suite/policies/policy.py
 +++ b/src/mme_vla_suite/policies/policy.py
-@@ -11,6 +11,7 @@ from openpi import transforms as _transforms
+@@ -11,10 +11,13 @@ from openpi import transforms as _transforms
  from openpi.shared import array_typing as at
  from openpi.shared import nnx_utils
  
@@ -168,11 +192,26 @@ index 9d7c430..58f2c56 100644
  from mme_vla_suite.models.integration.history_observation import HistAugObservation
  from mme_vla_suite.models.integration.history_pi0 import HistoryPi0
  from mme_vla_suite.shared.mem_buffer import MemoryBuffer, MemoryBufferRecurrent
-@@ -88,15 +89,24 @@ class MME_VLA_Policy:
+ 
++CAUSAL_K, CAUSAL_EVERY = 4, 4  # robomme-large-attr: frames masked per causal check; check every n-th call
++
+ class MME_VLA_Policy:
+     def __init__(
+         self,
+@@ -81,30 +84,75 @@ class MME_VLA_Policy:
+                                         
+         inputs = jax.tree.map(lambda x: x, obs)
+         inputs = self._prepare_history(inputs)
++        raw_inputs = inputs
+         inputs = self._input_transform(inputs)
+         observation = HistAugObservation.from_dict(
+             jax.tree.map(lambda x: jnp.asarray(x)[np.newaxis, ...], inputs)
+         )
          self._rng, sample_rng = jax.random.split(self._rng)
-     
+-    
++
          start_time = time.monotonic()
-+        history_gemma.MEM_ATTN.clear()
++        history_gemma.MEM_ATTN.clear(), history_gemma.MEM_TOK.clear()
          outputs = {
              "state": observation.state,
              "actions": self._sample_actions(sample_rng, observation, **self._sample_kwargs),
@@ -181,20 +220,64 @@ index 9d7c430..58f2c56 100644
          model_time = time.monotonic() - start_time
 -        outputs = jax.tree.map(lambda x: np.asarray(x[0, ...]), outputs)      
 +        outputs = jax.tree.map(lambda x: np.asarray(x[0, ...]), outputs)
++        attr = self._attribution(raw_inputs, sample_rng, outputs["actions"]) if history_gemma.MEM_ATTN else {}
          outputs = self._output_transform(outputs)
          outputs["infer_time_ms"] = model_time * 1000
 -        
-+        # robomme-large-attr: memory frames this call saw (absolute frame indices, right-padded) and their attention
-+        if history_gemma.MEM_ATTN:
-+            outputs["step_idx"] = np.int64(self.step_idx)
-+            outputs["mem_frames"] = np.asarray(self.mem_buffer.get_frame_sampling_indices(
-+                self.step_idx, self.config.budget, self.config.token_per_image))
-+            outputs["mem_attn"] = np.stack([p[0] for _, p in history_gemma.MEM_ATTN])  # [calls, S]
-+            outputs["mem_attn_qlen"] = np.array([q for q, _ in history_gemma.MEM_ATTN])
++        outputs |= attr
 +
          return outputs
      
++    def _attribution(self, raw_inputs: dict, sample_rng, actions) -> dict:
++        """robomme-large-attr (+ large-attr-margin) per call: memory frames (absolute indices, right-padded) and valid
++        mask, MemoryAttention probs, adjacent-frame cosine on SigLIP embeddings and memory-encoder outputs, and every
++        CAUSAL_EVERY-th call the change in the (normalized) action chunk when the top-k attended vs k random valid frames
++        are masked out of memory (same sampling noise). F = 32 frames, S = F * 16 memory tokens."""
++        F = self.config.budget // self.config.token_per_image
++        cos = lambda e_FD: np.sum(e_FD[:-1] * e_FD[1:], -1) / (
++            np.linalg.norm(e_FD[:-1], axis=-1) * np.linalg.norm(e_FD[1:], axis=-1) + 1e-8)
++        mem_attn_MS = np.stack([p[0] for _, p in history_gemma.MEM_ATTN])
++        valid_F = np.asarray(raw_inputs["static_mask"]).reshape(F, -1).any(-1)
++        out = {
++            "step_idx": np.int64(self.step_idx),
++            "mem_frames": np.asarray(self.mem_buffer.get_frame_sampling_indices(
++                self.step_idx, self.config.budget, self.config.token_per_image)),
++            "mem_valid": valid_F,
++            "mem_attn": mem_attn_MS,
++            "mem_attn_qlen": np.array([q for q, _ in history_gemma.MEM_ATTN]),
++            "cos_siglip": cos(np.asarray(raw_inputs["static_image_emb"], np.float32).reshape(F, -1, self.config.memory_feature.img.input_dim).mean(1)),
++            "cos_memtok": cos(history_gemma.MEM_TOK[0][0]),
++            "causal_top": np.float32(np.nan), "causal_rand": np.float32(np.nan),
++            "causal_top_frames": np.full(CAUSAL_K, -1), "causal_rand_frames": np.full(CAUSAL_K, -1),
++        }
++        self._n_calls += 1
++        if self._n_calls % CAUSAL_EVERY == 0 and valid_F.sum() > CAUSAL_K:
++            frame_attn_F = mem_attn_MS.mean(0).reshape(F, -1).sum(-1)
++            idx_F = np.flatnonzero(valid_F)
++            top = idx_F[np.argsort(-frame_attn_F[idx_F])[:CAUSAL_K]]
++            rand = np.random.default_rng(self._n_calls).choice(idx_F, CAUSAL_K, replace=False)
++            for name, frames in (("top", top), ("rand", rand)):
++                mask_S = np.asarray(raw_inputs["static_mask"]).copy().reshape(F, -1)
++                mask_S[frames] = False
++                inputs = self._input_transform({**raw_inputs, "static_mask": mask_S.reshape(-1)})
++                obs = HistAugObservation.from_dict(jax.tree.map(lambda x: jnp.asarray(x)[np.newaxis, ...], inputs))
++                masked = np.asarray(self._sample_actions(sample_rng, obs, **self._sample_kwargs)[0])
++                out[f"causal_{name}"] = np.float32(np.abs(masked - actions).mean())
++                out[f"causal_{name}_frames"] = frames
++        history_gemma.MEM_ATTN.clear(), history_gemma.MEM_TOK.clear()
++        return out
++
      @override
+     def reset(self) -> None:
+         del self.mem_buffer
+         self._prepare_mem_buffer()
+-        self.step_idx = -1  
++        self.step_idx = -1
+         self.exec_start_idx = 0
++        self._n_calls = 0
+         self._rng = jax.random.key(self._seed)
+             
+     
 diff --git a/src/mme_vla_suite/serving/websocket_policy_server.py b/src/mme_vla_suite/serving/websocket_policy_server.py
 index a1ac4f5..c4ec675 100644
 --- a/src/mme_vla_suite/serving/websocket_policy_server.py
