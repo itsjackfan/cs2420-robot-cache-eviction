@@ -94,6 +94,7 @@ PHASES:
             - 2026-11-22 22:43 `frame-importance-loo-simple`: standard loo-style masking per frame; track output difference on each frame to for causality
             - 2026-11-22 22:43 `frame-importance-loo-mean`: mean-based loo-style outputs per frame; track output difference on each frame to for causality
             - 2026-11-22 22:43 `frame-importance-loo-blur`: blur-based loo-style outputs per frame; track output difference on each frame to for causality
+            - 2026-11-23 04:51 `frame-importance-teacher-banzhaf`: more robust Banzhaf/random subset of counterfactuals sampling
     - Visually inspect (LLM as a judge) the outputs as a second-layer verification on whether the learned "important" segments are accurate
     - Run labelling pipeline for all long-context demos
     - Augment positive pairs with traditional CV (blurring, colour/saturation shift; NOTE: do NOT modify rotation or perspective especially for wrist and hand cams, as this might change the robot policy's inbuilt biases and mess with the model) + generative techniques and label as fine-tuning input for small diffusion model (more preparation can be done later in phase 2)
