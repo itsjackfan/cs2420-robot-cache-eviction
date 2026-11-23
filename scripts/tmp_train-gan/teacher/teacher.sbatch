@@ -3,7 +3,7 @@
 # saving frames + MemoryAttention per call (teacher/mme_attr.patch applied to robomme_policy_learning@ac846a9).
 # One GPU: JAX policy server (background) + RoboMME client. Human-submitted from ~/cs2420-robot-cache-eviction/train-gan:
 #   sbatch -p kempner_rtx -A kempner_ydu_lab -o $RCE_OUT_ROOT/train-gan/robomme-large-attr/slurm-%j.out \
-#     scripts/tmp_train-gan/teacher/teacher.sbatch <episodes per task> [only_tasks, comma-separated]
+#     scripts/tmp_train-gan/teacher/teacher.sbatch <episodes per task> [only_tasks, comma-separated] [group name]
 #SBATCH --job-name=robomme-large-attr
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
@@ -35,4 +35,4 @@ done
 cd examples/robomme
 $HOME/venvs/mme-vla-client/bin/python eval.py --args.port=$PORT --args.policy_name=robomme-large-attr \
   --args.model_ckpt_id=79999 --args.model_seed=7 --args.dataset=train --args.episodes=$1 \
-  --args.only_tasks="${2:-}" --args.save_dir=$OUT/eval --args.attr_dir=$OUT/rollouts
+  --args.only_tasks="${2:-}" --args.save_dir=$OUT/eval/${3:-all} --args.attr_dir=$OUT/rollouts  # one eval dir per job
