@@ -6,6 +6,7 @@
 #     scripts/tmp_train-gan/teacher/teacher.sbatch <episodes per task> [only_tasks, comma-separated] [group name]
 #SBATCH --job-name=robomme-large-attr
 #SBATCH --gres=gpu:1
+#SBATCH --constraint=a100|h100|h200|rtx6000pro
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=12:00:00
