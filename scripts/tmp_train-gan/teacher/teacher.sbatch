@@ -16,7 +16,9 @@ T=$RCE_OUT_ROOT/teacher
 REPO=$T/robomme_policy_learning
 OUT=$RCE_OUT_ROOT/train-gan/robomme-large-attr
 mkdir -p $OUT
-git -C $REPO checkout -q -- . && git -C $REPO apply $PWD/scripts/tmp_train-gan/teacher/mme_attr.patch  # clean apply
+PATCH=$PWD/scripts/tmp_train-gan/teacher/mme_attr.patch
+# re-apply only if this exact patch is not applied yet (concurrent jobs share $REPO)
+git -C $REPO apply -R --check $PATCH 2>/dev/null || { git -C $REPO checkout -q -- . && git -C $REPO apply $PATCH; }
 git -C $REPO diff --stat
 if ! ls /usr/share/vulkan/icd.d/nvidia_icd.json /etc/vulkan/icd.d/nvidia_icd.json >/dev/null 2>&1; then
   echo '{"file_format_version": "1.0.0", "ICD": {"library_path": "libGLX_nvidia.so.0", "api_version": "1.3.0"}}' > $OUT/nvidia_icd.json
