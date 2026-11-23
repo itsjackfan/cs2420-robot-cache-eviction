@@ -17,7 +17,7 @@ cd "$SLURM_SUBMIT_DIR"
 set -a; source .env; set +a
 T=$RCE_OUT_ROOT/teacher
 REPO=$T/robomme_policy_learning
-OUT=$RCE_OUT_ROOT/train-gan/robomme-large-attr
+OUT=$RCE_OUT_ROOT/train-gan/${RUN:-robomme-large-attr}  # RUN: run name (queue_full.sh)
 mkdir -p $OUT
 PATCH=$PWD/scripts/tmp_train-gan/teacher/mme_attr.patch
 # re-apply only if this exact patch is not applied yet (concurrent jobs share $REPO)

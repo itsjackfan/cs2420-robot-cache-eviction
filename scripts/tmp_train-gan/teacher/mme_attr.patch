@@ -21,7 +21,7 @@ index 9edff59..b8bd237 100644
              gui_render=False,
              max_steps=max_steps,
 diff --git a/examples/robomme/eval.py b/examples/robomme/eval.py
-index 245f305..0d55d26 100644
+index 245f305..48969ef 100644
 --- a/examples/robomme/eval.py
 +++ b/examples/robomme/eval.py
 @@ -39,6 +39,10 @@ class Args:
@@ -92,7 +92,7 @@ index 245f305..0d55d26 100644
 +
 +ATTR_KEYS = ("step_idx", "mem_frames", "mem_valid", "mem_attn", "mem_attn_qlen", "cos_siglip", "cos_memtok",
 +             "causal_top", "causal_rand", "causal_top_frames", "causal_rand_frames", "siglip_frame", "memtok_frame",
-+             "loo_replace_dact")
++             "banzhaf_keep", "banzhaf_dact")
 +
 +
 +def save_attr(path: Path, attr: dict, outcome: str, task_goal: str) -> None:
@@ -104,8 +104,8 @@ index 245f305..0d55d26 100644
 +    output cosine), causal_top / causal_rand [C] (mean |delta action|, normalized, masking the top-4 attended / 4 random
 +    frames; NaN on unchecked calls), causal_top_frames / causal_rand_frames [C, 4] (slot indices; -1 if unchecked),
 +    siglip_frame [C, 32, 2048] / memtok_frame [C, 32, 1024] float16 (raw per-frame embeddings; center before cosine),
-+    loo_replace_dact [C, 32] (mean |delta action| replacing that frame's SigLIP tokens with the call's frame mean;
-+    NaN on unchecked calls and padded frames)."""
++    banzhaf_keep [C, 32, 32] bool (random keep-sets: kept memory frames per sample) and banzhaf_dact [C, 32] (mean
++    |delta action| with only those frames in memory; NaN on unchecked calls)."""
 +    import cv2
 +    path.parent.mkdir(parents=True, exist_ok=True)
 +    jpeg = lambda frames: np.array([cv2.imencode(".jpg", f[..., ::-1], [cv2.IMWRITE_JPEG_QUALITY, 95])[1] for f in frames],
@@ -186,10 +186,10 @@ index 781c24a..9bd4bbc 100644
          encoded = einops.rearrange(encoded, "B T K G H -> B T (K G) H")
  
 diff --git a/src/mme_vla_suite/policies/policy.py b/src/mme_vla_suite/policies/policy.py
-index 9d7c430..3e561ed 100644
+index 9d7c430..f483dc3 100644
 --- a/src/mme_vla_suite/policies/policy.py
 +++ b/src/mme_vla_suite/policies/policy.py
-@@ -11,10 +11,13 @@ from openpi import transforms as _transforms
+@@ -11,10 +11,14 @@ from openpi import transforms as _transforms
  from openpi.shared import array_typing as at
  from openpi.shared import nnx_utils
  
@@ -199,11 +199,12 @@ index 9d7c430..3e561ed 100644
  from mme_vla_suite.shared.mem_buffer import MemoryBuffer, MemoryBufferRecurrent
  
 +CAUSAL_K, CAUSAL_EVERY = 4, 4  # robomme-large-attr: frames masked per causal check; check every n-th call
++BANZHAF_K = 32  # random keep-sets per checked call (Banzhaf sampling)
 +
  class MME_VLA_Policy:
      def __init__(
          self,
-@@ -81,30 +84,93 @@ class MME_VLA_Policy:
+@@ -81,30 +85,96 @@ class MME_VLA_Policy:
                                          
          inputs = jax.tree.map(lambda x: x, obs)
          inputs = self._prepare_history(inputs)
@@ -259,7 +260,7 @@ index 9d7c430..3e561ed 100644
 +            "memtok_frame": history_gemma.MEM_TOK[0][0].astype(np.float16),
 +            "causal_top": np.float32(np.nan), "causal_rand": np.float32(np.nan),
 +            "causal_top_frames": np.full(CAUSAL_K, -1), "causal_rand_frames": np.full(CAUSAL_K, -1),
-+            "loo_replace_dact": np.full(F, np.nan, np.float32),
++            "banzhaf_keep": np.zeros((BANZHAF_K, F), bool), "banzhaf_dact": np.full(BANZHAF_K, np.nan, np.float32),
 +        }
 +        self._n_calls += 1
 +        if self._n_calls % CAUSAL_EVERY == 0 and valid_F.sum() > CAUSAL_K:
@@ -275,17 +276,20 @@ index 9d7c430..3e561ed 100644
 +                masked = np.asarray(self._sample_actions(sample_rng, obs, **self._sample_kwargs)[0])
 +                out[f"causal_{name}"] = np.float32(np.abs(masked - actions).mean())
 +                out[f"causal_{name}_frames"] = frames
-+            # per-frame LOO by replacement: one frame's SigLIP tokens -> mean over this call's valid frames (position
-+            # and state embeddings kept), same sampling noise
-+            emb_FTD = np.asarray(raw_inputs["static_image_emb"]).reshape(F, -1, self.config.memory_feature.img.input_dim)
-+            mean_TD = emb_FTD[valid_F].mean(0)
-+            for f in idx_F:
-+                emb = emb_FTD.copy()
-+                emb[f] = mean_TD
-+                inputs = self._input_transform({**raw_inputs, "static_image_emb": emb.reshape(-1, emb.shape[-1])})
++            # Banzhaf sampling: BANZHAF_K random keep-sets (each valid frame kept w.p. 0.5, at least one), the rest
++            # masked out of memory, same sampling noise; offline, regressing banzhaf_dact on 1 - banzhaf_keep gives each
++            # frame's Banzhaf value (its average marginal effect over random contexts)
++            rng = np.random.default_rng(10**6 + self._n_calls)
++            for k in range(BANZHAF_K):
++                keep_F = valid_F & (rng.random(F) < 0.5)
++                if not keep_F.any():
++                    keep_F[rng.choice(idx_F)] = True
++                mask_S = np.asarray(raw_inputs["static_mask"]).copy().reshape(F, -1)
++                mask_S[~keep_F] = False
++                inputs = self._input_transform({**raw_inputs, "static_mask": mask_S.reshape(-1)})
 +                obs = HistAugObservation.from_dict(jax.tree.map(lambda x: jnp.asarray(x)[np.newaxis, ...], inputs))
-+                replaced = np.asarray(self._sample_actions(sample_rng, obs, **self._sample_kwargs)[0])
-+                out["loo_replace_dact"][f] = np.abs(replaced - actions).mean()
++                kept = np.asarray(self._sample_actions(sample_rng, obs, **self._sample_kwargs)[0])
++                out["banzhaf_keep"][k], out["banzhaf_dact"][k] = keep_F, np.abs(kept - actions).mean()
 +        jax.effects_barrier()  # the extra samples' callbacks must not leak into the next call's record
 +        history_gemma.MEM_ATTN.clear(), history_gemma.MEM_TOK.clear()
 +        return out
