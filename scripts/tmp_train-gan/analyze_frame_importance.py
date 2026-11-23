@@ -103,7 +103,8 @@ def teacher(exp):
             deficit = np.abs(np.diff(a[v])) * n
             adj["deficit"].append(deficit), adj["cos_siglip"].append(cos["siglip"]), adj["cos_memtok"].append(cos["memtok"])
             adj["loo_gap"].append(np.abs(np.diff(loo_CF[c][v]))), adj["success"].append(np.full(len(deficit), ok))
-            ep_def.append(deficit.mean()), ep_cs.append(cos["siglip"].mean()), ep_cm.append(cos["memtok"].mean())
+            if len(deficit):  # calls with one valid frame have no adjacent pair
+                ep_def.append(deficit.mean()), ep_cs.append(cos["siglip"].mean()), ep_cm.append(cos["memtok"].mean())
         eps["task"].append(p.parent.name), eps["success"].append(ok)
         eps["deficit"].append(np.mean(ep_def)), eps["cos_siglip"].append(np.mean(ep_cs)), eps["cos_memtok"].append(np.mean(ep_cm))
     R = {k: np.asarray(v) for k, v in rows.items()}
