@@ -125,7 +125,7 @@ index 245f305..aeb16c1 100644
              success_flag = "unknown"
  
 diff --git a/src/mme_vla_suite/models/integration/history_gemma.py b/src/mme_vla_suite/models/integration/history_gemma.py
-index 781c24a..a964565 100644
+index 781c24a..9bd4bbc 100644
 --- a/src/mme_vla_suite/models/integration/history_gemma.py
 +++ b/src/mme_vla_suite/models/integration/history_gemma.py
 @@ -1,7 +1,10 @@
@@ -160,18 +160,19 @@ index 781c24a..a964565 100644
  @at.typecheck
  class MemoryRMSNorm(nn.Module):
      @nn.compact
-@@ -77,7 +94,9 @@ class MemoryAttention(nn.Module):
+@@ -77,7 +94,10 @@ class MemoryAttention(nn.Module):
          rms_norm = MemoryRMSNorm(name="mem_rms_norm")
          x = rms_norm(x)
          q = q_einsum("BTD,NDH->BTNH", x)
 -        
-+        jax.debug.callback(_record_mem_tok, einops.reduce(
-+            mem_seq.astype(jnp.float32), "b (f t) d -> b f d", "mean", t=TOKENS_PER_FRAME))
++        if mem_len % TOKENS_PER_FRAME == 0:  # model init traces a dummy memory of length 4
++            jax.debug.callback(_record_mem_tok, einops.reduce(
++                mem_seq.astype(jnp.float32), "b (f t) d -> b f d", "mean", t=TOKENS_PER_FRAME))
 +
          mem_seq = rms_norm(mem_seq)
          k, v = kv_einsum("BSD,2KDH->2BSKH", mem_seq)
          
-@@ -97,6 +116,8 @@ class MemoryAttention(nn.Module):
+@@ -97,6 +117,8 @@ class MemoryAttention(nn.Module):
          attn_mask = mem_mask[:, None, None, None, :]  # (B, 1, 1, 1, S)
          masked_logits = jnp.where(attn_mask, logits, -2.3819763e38)
          probs = jax.nn.softmax(masked_logits, axis=-1).astype(x.dtype)
