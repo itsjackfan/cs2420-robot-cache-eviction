@@ -62,10 +62,13 @@ def convert(src, dst):
 class RoboMMETask(Dataset):
     """One converted task file. Samples at execution steps t only (no loss on the conditioning video); the obs window
     ends at t with stride obs_stride and may reach into the video (first frame repeated); the action window starts at
-    t (last action repeated). -> state [O, S] f32, image [O, V, H, W, C] u8, action [P, A] f32, lang str."""
+    t - action_offset (last action repeated; offset O - 1 at stride 1 = one action per obs frame, as RT-1).
+    -> state [O, S] f32, image [O, V, H, W, C] u8, action [P, A] f32, action_valid [P] bool (False before frame 0 or
+    on video frames), lang str."""
 
-    def __init__(self, path, demos, obs_horizon, action_horizon, obs_stride=1):
+    def __init__(self, path, demos, obs_horizon, action_horizon, obs_stride=1, action_offset=0):
         self.path, self.demos, self.O, self.P, self.stride = path, demos, obs_horizon, action_horizon, obs_stride
+        self.offset = action_offset
         with h5py.File(path) as f:
             self.lang = {d: f[d].attrs["lang"] for d in demos}
             self.index = [(d, int(t), len(f[d]["action"])) for d in demos for t in np.flatnonzero(~f[d]["video"][:])]
@@ -85,12 +88,13 @@ class RoboMMETask(Dataset):
     def __getitem__(self, i):
         d, t, n = self.index[i]
         obs_t_O = np.clip(t - self.stride * np.arange(self.O - 1, -1, -1), 0, None)
-        act_t_P = np.clip(np.arange(t, t + self.P), None, n - 1)
+        act_t_P = np.arange(t - self.offset, t - self.offset + self.P)
         with h5py.File(self.path) as f:  # opened per item: h5py handles don't survive DataLoader workers
             g = f[d]
+            clip_P = np.clip(act_t_P, 0, n - 1)
             image_OVHWC = np.stack([np.stack([decode(j) for j in window(g[v], obs_t_O)]) for v in ("front", "wrist")], 1)
-            return dict(state=window(g["state"], obs_t_O), image=image_OVHWC, action=wrap_roll(window(g["action"], act_t_P)),
-                        lang=self.lang[d])
+            return dict(state=window(g["state"], obs_t_O), image=image_OVHWC, action=wrap_roll(window(g["action"], clip_P)),
+                        action_valid=(act_t_P >= 0) & ~window(g["video"], clip_P), lang=self.lang[d])
 
 
 def frames(obs):

@@ -85,6 +85,21 @@ def test_samples_skip_video_and_window_reaches_into_it(rcfg, robomme_root):
     assert train[N - VIDEO - 1]["action"][:, 0].tolist() == [N] * 4  # last action repeated
 
 
+def test_action_offset_aligns_actions_with_obs_window_and_masks_video(rcfg, robomme_root):
+    rcfg.data.obs_horizon, rcfg.data.action_horizon, rcfg.data.task.obs_stride = 3, 3, 1
+    rcfg.data.task.action_offset = 2
+    train, _ = build_datasets(rcfg, robomme_root)
+    s = train[0]  # first execution step = frame VIDEO (0-indexed); actions at frames VIDEO - 2 .. VIDEO
+    assert s["action"][:, 0].tolist() == [VIDEO - 1, VIDEO, VIDEO + 1] == s["state"][:, 0].tolist()
+    assert s["action_valid"].tolist() == [False, False, True]  # video frames carry no loss
+    assert train[1]["action_valid"].tolist() == [False, True, True]
+
+
+def test_action_valid_all_true_without_offset(rcfg, robomme_root):
+    train, _ = build_datasets(rcfg, robomme_root)
+    assert train[0]["action_valid"].tolist() == [True] * 4
+
+
 def test_action_stats_execution_steps_only(rcfg, robomme_root):
     train, _ = build_datasets(rcfg, robomme_root)
     mean_A, std_A = action_stats(train)

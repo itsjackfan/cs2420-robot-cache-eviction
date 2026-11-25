@@ -89,16 +89,18 @@ PHASES:
         - 2026-11-22 13:25 `robomme-large-attr`: swap in a large teacher model that has already been trained on RoboMME and use its successful rollouts to attribute attention ~~and grad scores~~ across frames 
             - 2026-11-22 22:28 `large-attr-margin`: ablate to check rollouts on continuity metrics: attn score deficit and cos similarity between two consecutive frames in the context at one point in the rollout
                 GOAL: identify if margin size has a correlation with task success / importance probability
-                RESULTS: 
             - 2026-11-22 22:43 `frame-importance-learnedmask`: **actually identifying which frame is important**; taking a learned mask on inputs for a particular model's rollouts to identify which frames are important, trained on the standard small Octo model
             - 2026-11-22 22:43 `frame-importance-loo-simple`: standard loo-style masking per frame; track output difference on each frame to for causality
             - 2026-11-22 22:43 `frame-importance-loo-mean`: mean-based loo-style outputs per frame; track output difference on each frame to for causality
             - 2026-11-22 22:43 `frame-importance-loo-blur`: blur-based loo-style outputs per frame; track output difference on each frame to for causality
             - 2026-11-23 04:51 `frame-importance-teacher-banzhaf`: more robust Banzhaf/random subset of counterfactuals sampling
             - 2026-11-23 11:02 `teacher-evict-top4` `teacher-evict-rand4`: an ablation to test whether the top 4 memory attention action change will actually be correlated to task success; if this works, also ablate if we can change the k of the top-k group
+                RESULTS: **SUCCESSFUL!** evicting top4 memory frames noticeably causes drop in performance
     - Visually inspect (LLM as a judge) the outputs as a second-layer verification on whether the learned "important" segments are accurate
     - Run labelling pipeline for all long-context demos
     - Augment positive pairs with traditional CV (blurring, colour/saturation shift; NOTE: do NOT modify rotation or perspective especially for wrist and hand cams, as this might change the robot policy's inbuilt biases and mess with the model) + generative techniques and label as fine-tuning input for small diffusion model (more preparation can be done later in phase 2)
+
+- 2026-11-25 10:44 `robomme-attr-rt1x-w15`: eliminate memory module-based inductive biases and weird token-mixing and sampling behaviours that likely biased the model that was caused by the MME-VLA memory modules; run attribution tests on standard windows ONLY with no additional changes
 
 NOTE: this will be contingent on if image similarity signals anything;
 - 2026-11-22 22:23 `spr`: in accordance with the SPR paper, train an image encoder to contrastively learn and encode the potential next states, only with an adjusted loss that shapes to frame importance / permanence

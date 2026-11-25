@@ -1,0 +1,18 @@
+# @package _global_
+# RT-1-X (released OXE JAX config, ~55M) from the released weights, on RoboMME (use with data=robomme eval=robomme):
+# 15 contiguous frames (stride 1), one action per frame, loss on every execution frame; executes the newest action.
+# Converted weights + USE cache in ${RCE_DATA_DIR}/rt1x (scripts/convert_rt1x.py, scripts/tmp_train-gan/rt1x/).
+policy:
+  _target_: src.policies.rt1x.RT1XPolicy
+  lang_cache: ${oc.env:RCE_DATA_DIR,data}/rt1x/use_large5_robomme.npz
+  obs_horizon: ${data.obs_horizon}
+  pretrained: false   # every weight comes from init
+  init: ${oc.env:RCE_DATA_DIR,data}/rt1x/rt1x_torch.pt
+data:
+  obs_horizon: 15
+  action_horizon: 15
+  task:
+    obs_stride: 1
+    action_offset: 14   # action labels aligned with the obs window
+eval:
+  n_action_steps: 1

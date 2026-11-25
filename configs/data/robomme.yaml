@@ -7,4 +7,5 @@ task:
   _target_: src.robomme.RoboMMETask
   _partial_: true
   obs_stride: 8                    # = MME-VLA TokenDrop temporal stride
+  action_offset: 0                 # action window starts at t - action_offset
 sources: {robomme: true}
